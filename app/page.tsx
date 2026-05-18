@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,8 +62,12 @@ export default function HomePage() {
             <Badge variant="secondary" className="text-xs">Beta</Badge>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm">Войти</Button>
-            <Button size="sm">Начать бесплатно</Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/login">Войти</Link>
+            </Button>
+            <Button size="sm" asChild>
+              <Link href="/register">Начать бесплатно</Link>
+            </Button>
           </div>
         </div>
       </header>
@@ -82,11 +87,11 @@ export default function HomePage() {
           и детальное техническое задание на оптимизацию.
         </p>
         <div className="flex items-center justify-center gap-3">
-          <Button size="lg" className="text-base px-8">
-            Попробовать бесплатно
+          <Button size="lg" className="text-base px-8" asChild>
+            <Link href="/register">Попробовать бесплатно</Link>
           </Button>
-          <Button size="lg" variant="outline" className="text-base px-8">
-            Смотреть пример
+          <Button size="lg" variant="outline" className="text-base px-8" asChild>
+            <Link href="/login">Войти</Link>
           </Button>
         </div>
       </section>
@@ -158,8 +163,11 @@ export default function HomePage() {
                 <Button
                   className="w-full"
                   variant={plan.highlight ? "default" : "outline"}
+                  asChild
                 >
-                  {plan.price === "0" ? "Начать бесплатно" : "Выбрать план"}
+                  <Link href="/register">
+                    {plan.price === "0" ? "Начать бесплатно" : "Выбрать план"}
+                  </Link>
                 </Button>
               </CardContent>
             </Card>

@@ -16,20 +16,68 @@ datasource db {
 // ─────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String?
-  plan         Plan     @default(FREE)
-  reportsUsed  Int      @default(0)
-  reportsLimit Int      @default(3) // free: 3, starter: 30, pro: unlimited (-1)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?   // аватар из Google OAuth
+  password      String?   // null для OAuth-пользователей
+  plan          Plan      @default(FREE)
+  reportsUsed   Int       @default(0)
+  reportsLimit  Int       @default(3)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   projects      Project[]
   reports       Report[]
   subscription  Subscription?
+  accounts      Account[]
+  sessions      Session[]
 
   @@map("users")
+}
+
+// next-auth: OAuth аккаунты (Google и др.)
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+// next-auth: сессии (database strategy)
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// next-auth: email verification tokens
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
 }
 
 enum Plan {
