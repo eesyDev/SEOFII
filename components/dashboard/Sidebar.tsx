@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, FolderOpen, FileText, Settings, Zap } from "lucide-react";
+import { LayoutDashboard, FolderOpen, FileText, Settings, Zap, CreditCard } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Дашборд" },
   { href: "/projects", icon: FolderOpen, label: "Проекты" },
   { href: "/reports", icon: FileText, label: "Отчёты" },
+  { href: "/billing", icon: CreditCard, label: "Биллинг" },
   { href: "/settings", icon: Settings, label: "Настройки" },
 ];
 
