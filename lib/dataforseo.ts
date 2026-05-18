@@ -3,12 +3,12 @@
 
 const BASE_URL = "https://api.dataforseo.com/v3";
 
-// Базовые заголовки с Basic Auth (login:password → base64)
+const USE_MOCK = !process.env.DATAFORSEO_LOGIN || !process.env.DATAFORSEO_PASSWORD;
+
 function getHeaders(): HeadersInit {
   const credentials = Buffer.from(
     `${process.env.DATAFORSEO_LOGIN}:${process.env.DATAFORSEO_PASSWORD}`
   ).toString("base64");
-
   return {
     Authorization: `Basic ${credentials}`,
     "Content-Type": "application/json",
@@ -37,8 +37,28 @@ export interface KeywordData {
 // SERP: топ-10 конкурентов по URL
 // ─────────────────────────────────────────
 
+function getMockCompetitors(url: string): SerpResult[] {
+  const domain = new URL(url).hostname;
+  return Array.from({ length: 10 }, (_, i) => ({
+    domain: `competitor${i + 1}.com`,
+    position: i + 1,
+    title: `Best ${domain} Guide ${i + 1} — Complete Overview`,
+    url: `https://competitor${i + 1}.com/guide`,
+  }));
+}
+
+function getMockKeywords(keywords: string[]): KeywordData[] {
+  return keywords.slice(0, 10).map((kw, i) => ({
+    keyword: kw,
+    volume: Math.floor(Math.random() * 5000) + 100,
+    cpc: Math.round((Math.random() * 3 + 0.1) * 100) / 100,
+    competition: Math.round(Math.random() * 100) / 100,
+  }));
+}
+
 export async function fetchCompetitors(url: string): Promise<SerpResult[]> {
-  // Вытаскиваем keyword из title/meta страницы — упрощённо берём домен+путь
+  if (USE_MOCK) return getMockCompetitors(url);
+
   const targetUrl = new URL(url);
   const searchQuery = targetUrl.hostname + " " + targetUrl.pathname.replace(/\//g, " ").trim();
 
@@ -79,6 +99,7 @@ export async function fetchCompetitors(url: string): Promise<SerpResult[]> {
 
 export async function fetchKeywords(keywords: string[]): Promise<KeywordData[]> {
   if (keywords.length === 0) return [];
+  if (USE_MOCK) return getMockKeywords(keywords);
 
   const response = await fetch(`${BASE_URL}/keywords_data/google_ads/search_volume/live`, {
     method: "POST",
