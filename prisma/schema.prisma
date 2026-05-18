@@ -1,0 +1,155 @@
+// Prisma schema для SEO Brief Generator
+// База данных: PostgreSQL через Supabase
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // нужен для Supabase connection pooling
+}
+
+// ─────────────────────────────────────────
+// ПОЛЬЗОВАТЕЛИ
+// ─────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  plan         Plan     @default(FREE)
+  reportsUsed  Int      @default(0)
+  reportsLimit Int      @default(3) // free: 3, starter: 30, pro: unlimited (-1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  projects      Project[]
+  reports       Report[]
+  subscription  Subscription?
+
+  @@map("users")
+}
+
+enum Plan {
+  FREE
+  STARTER
+  PRO
+}
+
+// ─────────────────────────────────────────
+// ПОДПИСКИ (LemonSqueezy)
+// ─────────────────────────────────────────
+
+model Subscription {
+  id                String             @id @default(cuid())
+  userId            String             @unique
+  plan              Plan
+  status            SubscriptionStatus @default(ACTIVE)
+  lemonSqueezyId    String?            @unique
+  currentPeriodEnd  DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PAST_DUE
+}
+
+// ─────────────────────────────────────────
+// ПРОЕКТЫ
+// ─────────────────────────────────────────
+
+model Project {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  domain    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports Report[]
+
+  @@index([userId])
+  @@map("projects")
+}
+
+// ─────────────────────────────────────────
+// ОТЧЁТЫ (основная сущность)
+// ─────────────────────────────────────────
+
+model Report {
+  id           String       @id @default(cuid())
+  userId       String
+  projectId    String?
+  url          String
+  status       ReportStatus @default(PENDING)
+  result       Json?        // готовое ТЗ от Claude
+  costUsd      Decimal?     @db.Decimal(8, 6) // стоимость запроса к Claude
+  errorMessage String?      // причина ошибки если status = FAILED
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project     Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  competitors Competitor[]
+  keywords    Keyword[]
+
+  @@index([userId, status])
+  @@index([projectId])
+  @@map("reports")
+}
+
+enum ReportStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+// ─────────────────────────────────────────
+// КОНКУРЕНТЫ из выдачи
+// ─────────────────────────────────────────
+
+model Competitor {
+  id        String   @id @default(cuid())
+  reportId  String
+  domain    String
+  position  Int      // позиция в выдаче (1–10)
+  title     String
+  url       String
+  createdAt DateTime @default(now())
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, position])
+  @@map("competitors")
+}
+
+// ─────────────────────────────────────────
+// КЛЮЧЕВЫЕ СЛОВА
+// ─────────────────────────────────────────
+
+model Keyword {
+  id          String   @id @default(cuid())
+  reportId    String
+  keyword     String
+  volume      Int      @default(0)  // месячный объём поиска
+  cpc         Decimal  @default(0) @db.Decimal(8, 2)
+  competition Decimal  @default(0) @db.Decimal(5, 4) // 0.0000–1.0000
+  createdAt   DateTime @default(now())
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@map("keywords")
+}
