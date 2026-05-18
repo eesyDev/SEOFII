@@ -24,6 +24,7 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
 
+    // Шаг 1: регистрация
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -38,9 +39,17 @@ export default function RegisterPage() {
       return;
     }
 
-    // Сразу логиним после регистрации
-    await signIn("credentials", { email, password, redirect: false });
+    // Шаг 2: логин сразу после регистрации
+    const result = await signIn("credentials", { email, password, redirect: false });
+
+    if (result?.error) {
+      setError("Аккаунт создан, но не удалось войти. Попробуй войти вручную.");
+      setLoading(false);
+      return;
+    }
+
     router.push("/dashboard");
+    router.refresh(); // обновляем Server Components с новой сессией
   }
 
   return (

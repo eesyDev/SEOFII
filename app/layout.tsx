@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import StoreProvider from "@/components/providers/StoreProvider";
+import SessionProvider from "@/components/providers/SessionProvider";
 
 const geistSans = Geist({ subsets: ["latin"], variable: "--font-sans" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
@@ -16,7 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ru" className={cn(geistSans.variable, geistMono.variable)}>
       <body className="font-sans antialiased">
-          <StoreProvider>{children}</StoreProvider>
+          <SessionProvider>
+            <StoreProvider>{children}</StoreProvider>
+          </SessionProvider>
         </body>
     </html>
   );
