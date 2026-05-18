@@ -109,7 +109,7 @@ export const generateReportTask = task({
         where: { id: reportId },
         data: {
           status: "DONE",
-          result: brief,
+          result: brief as unknown as import("@prisma/client").Prisma.InputJsonValue,
           costUsd,
         },
       });

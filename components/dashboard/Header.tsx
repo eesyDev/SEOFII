@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -22,9 +23,20 @@ interface HeaderProps {
 }
 
 export default function Header({ user }: HeaderProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const initials = user.name
     ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
     : user.email?.[0].toUpperCase() ?? "U";
+
+  if (!mounted) {
+    return (
+      <header className="h-14 border-b flex items-center justify-end px-6 bg-background">
+        <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />
+      </header>
+    );
+  }
 
   return (
     <header className="h-14 border-b flex items-center justify-end px-6 bg-background">

@@ -14,12 +14,13 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   PENDING: "outline", PROCESSING: "secondary", DONE: "default", FAILED: "destructive",
 };
 
-export default async function ProjectPage({ params }: { params: { id: string } }) {
+export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
+  const { id } = await params;
   const project = await prisma.project.findUnique({
-    where: { id: params.id, userId: session.user.id },
+    where: { id, userId: session.user.id },
     include: {
       reports: {
         orderBy: { createdAt: "desc" },

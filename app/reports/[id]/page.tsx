@@ -19,12 +19,13 @@ const STATUS_CONFIG = {
   FAILED:     { label: "Ошибка",          icon: XCircle,       variant: "destructive" },
 } as const;
 
-export default async function ReportPage({ params }: { params: { id: string } }) {
+export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
+  const { id } = await params;
   const report = await prisma.report.findUnique({
-    where: { id: params.id, userId: session.user.id },
+    where: { id, userId: session.user.id },
     include: {
       competitors: { orderBy: { position: "asc" } },
       keywords:    { orderBy: { volume: "desc" }, take: 20 },
