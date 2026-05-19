@@ -26,11 +26,11 @@ export default function Sidebar({ reportsUsed, reportsLimit, plan }: SidebarProp
   return (
     <aside className="hidden md:flex flex-col w-60 border-r bg-background min-h-screen">
       {/* Лого */}
-      <div className="flex items-center gap-2 px-6 py-5 border-b">
+      <Link href="/dashboard" className="flex items-center gap-2 px-6 py-5 border-b hover:opacity-80 transition-opacity">
         <Zap className="h-5 w-5 text-primary" />
         <span className="font-bold text-lg">SEOBrief</span>
         <Badge variant="secondary" className="text-xs ml-auto">Beta</Badge>
-      </div>
+      </Link>
 
       {/* Навигация */}
       <nav className="flex-1 px-3 py-4 space-y-1">

@@ -11,8 +11,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, Settings, User } from "lucide-react";
+import { LogOut, Settings, User, Sun, Moon } from "lucide-react";
 import Link from "next/link";
+import { useTheme } from "next-themes";
 
 interface HeaderProps {
   user: {
@@ -24,6 +25,7 @@ interface HeaderProps {
 
 export default function Header({ user }: HeaderProps) {
   const [mounted, setMounted] = useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
   useEffect(() => setMounted(true), []);
 
   const initials = user.name
@@ -39,7 +41,14 @@ export default function Header({ user }: HeaderProps) {
   }
 
   return (
-    <header className="h-14 border-b flex items-center justify-end px-6 bg-background">
+    <header className="h-14 border-b flex items-center justify-end gap-2 px-6 bg-background">
+      <button
+        onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        aria-label="Переключить тему"
+      >
+        {resolvedTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      </button>
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-2 outline-none">
           <Avatar className="h-8 w-8">
