@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft, Clock, CheckCircle2, XCircle, Loader2,
-  BarChart2, Users, FileText, Lightbulb, ShieldCheck,
+  BarChart2, Users, FileText, Lightbulb, ShieldCheck, Zap, Lock,
 } from "lucide-react";
 import Link from "next/link";
 import type { SEOBrief, EEATScore } from "@/lib/claude";
@@ -23,21 +23,30 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
+  const userId = session.user.id;
   const { id } = await params;
-  const report = await prisma.report.findUnique({
-    where: { id, userId: session.user.id },
-    include: {
-      competitors: { orderBy: { position: "asc" } },
-      keywords:    { orderBy: { volume: "desc" }, take: 20 },
-      project:     { select: { name: true } },
-    },
-  });
+
+  const [report, user] = await Promise.all([
+    prisma.report.findUnique({
+      where: { id, userId },
+      include: {
+        competitors: { orderBy: { position: "asc" } },
+        keywords:    { orderBy: { volume: "desc" }, take: 20 },
+        project:     { select: { name: true } },
+      },
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true },
+    }),
+  ]);
 
   if (!report) notFound();
 
   const config = STATUS_CONFIG[report.status];
   const StatusIcon = config.icon;
   const brief = report.result as SEOBrief | null;
+  const isFree = !user || user.plan === "FREE";
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -227,6 +236,50 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           </Card>
 
           {/* E-E-A-T анализ */}
+          {/* Баннер апгрейда — только для Free */}
+          {isFree && (
+            <div className="relative rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-6 overflow-hidden">
+              {/* Декоративный фон */}
+              <div className="absolute -right-6 -top-6 h-32 w-32 rounded-full bg-primary/10" />
+              <div className="absolute -right-2 -bottom-4 h-20 w-20 rounded-full bg-primary/5" />
+
+              <div className="relative">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                    <Zap className="h-4 w-4 text-primary" />
+                  </div>
+                  <p className="font-semibold text-base">Получить полный отчёт</p>
+                </div>
+
+                <p className="text-sm text-muted-foreground mb-4">
+                  Это базовый отчёт. Pro-версия даёт в 3× больше данных для копирайтера:
+                </p>
+
+                <ul className="space-y-2 mb-5">
+                  {[
+                    "Разбор каждого конкурента отдельно — структура, объём, сильные стороны",
+                    "LSI-кластеры и семантическое ядро по теме",
+                    "Рекомендации по schema.org разметке для сниппетов",
+                    "Анализ контентных пробелов — что есть у конкурентов, чего нет у вас",
+                    "Приоритизированный план: с чего начать, что принесёт трафик быстрее",
+                  ].map((item, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <Lock className="h-3.5 w-3.5 text-primary/60 mt-0.5 shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <Button asChild size="sm" className="gap-2">
+                  <Link href="/billing">
+                    <Zap className="h-4 w-4" />
+                    Перейти на Pro
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          )}
+
           {brief.eeatAnalysis && (
             <Card>
               <CardHeader>
