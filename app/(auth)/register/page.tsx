@@ -11,6 +11,15 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Zap, Globe, AlertCircle, Check, X } from "lucide-react";
 
+function PasswordRule({ met, label }: { met: boolean; label: string }) {
+  return (
+    <li className={`flex items-center gap-1.5 text-xs ${met ? "text-green-600" : "text-muted-foreground"}`}>
+      {met ? <Check className="h-3 w-3 shrink-0" /> : <X className="h-3 w-3 shrink-0" />}
+      {label}
+    </li>
+  );
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const [name, setName] = useState("");
