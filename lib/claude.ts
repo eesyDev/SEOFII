@@ -19,6 +19,22 @@ export interface BriefSection {
   content: string;
 }
 
+export interface EEATScore {
+  score: number;
+  signals: string[];
+  gaps: string[];
+}
+
+export interface EEATAnalysis {
+  experience: EEATScore;
+  expertise: EEATScore;
+  authoritativeness: EEATScore;
+  trustworthiness: EEATScore;
+  overallScore: number;
+  summary: string;
+  recommendations: string[];
+}
+
 export interface SEOBrief {
   targetKeyword: string;
   recommendedTitle: string;
@@ -29,6 +45,7 @@ export interface SEOBrief {
   topKeywordsToInclude: string[];
   competitorInsights: string;
   additionalRecommendations: string[];
+  eeatAnalysis: EEATAnalysis;
 }
 
 export interface ClaudeResult {
@@ -64,8 +81,67 @@ function getMockBrief(targetUrl: string, competitors: SerpResult[]): ClaudeResul
         "Внутренняя перелинковка минимум 3–5 релевантных статей",
         "Оптимизировать изображения (alt-теги, WebP формат)",
       ],
+      eeatAnalysis: {
+        experience: {
+          score: 6,
+          signals: [
+            "Конкуренты упоминают реальные кейсы и результаты",
+            "Некоторые страницы содержат скриншоты и примеры из практики",
+          ],
+          gaps: [
+            "Большинство не указывают конкретный опыт автора в годах",
+            "Нет упоминания личных экспериментов или тестов",
+          ],
+        },
+        expertise: {
+          score: 7,
+          signals: [
+            "Используется профессиональная терминология",
+            "Ссылки на исследования и официальную документацию Google",
+            "Структурированные объяснения сложных концепций",
+          ],
+          gaps: [
+            "Биографии авторов присутствуют менее чем у 50% конкурентов",
+            "Нет академических или профессиональных регалий",
+          ],
+        },
+        authoritativeness: {
+          score: 5,
+          signals: [
+            "Несколько конкурентов упомянуты в отраслевых изданиях",
+            "Присутствуют отзывы и рейтинги",
+          ],
+          gaps: [
+            "Отсутствуют ссылки от авторитетных доменов (.edu, .gov)",
+            "Нет партнёрств с признанными организациями",
+            "Нет упоминаний в крупных медиа",
+          ],
+        },
+        trustworthiness: {
+          score: 7,
+          signals: [
+            "HTTPS у всех конкурентов",
+            "Политика конфиденциальности и условия использования присутствуют",
+            "Контактная информация указана",
+          ],
+          gaps: [
+            "Нет явного раскрытия методологии",
+            "Дата последнего обновления отсутствует у большинства",
+          ],
+        },
+        overallScore: 6,
+        summary: "[МОК] Конкуренты демонстрируют средний уровень E-E-A-T. Наибольшие возможности для отстройки — в экспертизе (биография автора) и авторитетности (внешние упоминания). Доверие можно повысить прозрачностью: датой обновления, методологией, источниками.",
+        recommendations: [
+          "Добавить биографию автора с конкретными регалиями и опытом (не менее 150 слов)",
+          "Включить раздел «Как мы тестировали» или «Методология» — это сигнал Experience",
+          "Цитировать минимум 3–5 авторитетных источников: Google Search Central, исследования Moz/Ahrefs",
+          "Указать дату публикации и последнего обновления статьи",
+          "Добавить schema.org разметку: Article, Person, Organization",
+          "Включить реальные примеры и кейсы с цифрами для демонстрации опыта",
+        ],
+      },
     },
-    costUsd: 0, // мок, реальных затрат нет
+    costUsd: 0,
   };
 }
 
@@ -81,11 +157,11 @@ export async function generateSEOBrief(
   if (USE_MOCK) return getMockBrief(targetUrl, competitors);
 
   const competitorList = competitors
-    .map((c) => `${c.position}. ${c.title} (${c.url})`)
-    .join("\n");
+    .map((c) => `${c.position}. ${c.title}\n   URL: ${c.url}\n   Snippet: ${c.snippet || "н/д"}`)
+    .join("\n\n");
 
   const keywordList = keywords
-    .slice(0, 20) // топ-20 ключей чтобы не раздувать промпт
+    .slice(0, 20)
     .map((k) => `- ${k.keyword}: объём ${k.volume}, CPC $${k.cpc}, конкуренция ${k.competition}`)
     .join("\n");
 
@@ -93,13 +169,15 @@ export async function generateSEOBrief(
 
 АНАЛИЗИРУЕМАЯ СТРАНИЦА: ${targetUrl}
 
-ТОП-10 КОНКУРЕНТОВ В ВЫДАЧЕ:
+ТОП-10 КОНКУРЕНТОВ В ВЫДАЧЕ (с заголовками и сниппетами из поиска):
 ${competitorList}
 
 КЛЮЧЕВЫЕ СЛОВА:
 ${keywordList}
 
 Создай структурированное SEO ТЗ в формате JSON со следующими полями:
+
+1. Основные SEO-параметры:
 - targetKeyword: основной ключевой запрос
 - recommendedTitle: рекомендуемый title (до 60 символов)
 - recommendedMetaDescription: рекомендуемый meta description (до 155 символов)
@@ -109,6 +187,22 @@ ${keywordList}
 - topKeywordsToInclude: массив ключевых слов для включения в текст
 - competitorInsights: краткий анализ конкурентов
 - additionalRecommendations: массив дополнительных рекомендаций
+
+2. E-E-A-T анализ (eeatAnalysis):
+Проанализируй сниппеты и URL конкурентов на предмет сигналов Experience, Expertise, Authoritativeness, Trustworthiness.
+
+eeatAnalysis должен содержать:
+- experience: { score: 1-10, signals: string[], gaps: string[] }
+  (Опыт: упоминания реальных кейсов, личных тестов, «мы проверили», конкретных результатов)
+- expertise: { score: 1-10, signals: string[], gaps: string[] }
+  (Экспертиза: биографии авторов, регалии, профессиональная терминология, ссылки на исследования)
+- authoritativeness: { score: 1-10, signals: string[], gaps: string[] }
+  (Авторитетность: упоминания в медиа, партнёрства, отраслевые награды, цитирование другими)
+- trustworthiness: { score: 1-10, signals: string[], gaps: string[] }
+  (Доверие: HTTPS, прозрачность методологии, дата обновления, контакты, источники)
+- overallScore: средний балл (1-10)
+- summary: краткий вывод об уровне E-E-A-T у конкурентов и возможностях для отстройки
+- recommendations: массив конкретных рекомендаций для копирайтера как усилить E-E-A-T (5-7 пунктов)
 
 Отвечай ТОЛЬКО JSON, без markdown-обёртки.`;
 

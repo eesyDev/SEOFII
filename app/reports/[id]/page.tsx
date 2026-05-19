@@ -7,10 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft, Clock, CheckCircle2, XCircle, Loader2,
-  BarChart2, Users, FileText, Lightbulb,
+  BarChart2, Users, FileText, Lightbulb, ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
-import type { SEOBrief } from "@/lib/claude";
+import type { SEOBrief, EEATScore } from "@/lib/claude";
 
 const STATUS_CONFIG = {
   PENDING:    { label: "В очереди",       icon: Clock,         variant: "outline"     },
@@ -225,7 +225,122 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
               </div>
             </CardContent>
           </Card>
+
+          {/* E-E-A-T анализ */}
+          {brief.eeatAnalysis && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4" /> E-E-A-T анализ
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5 text-sm">
+                {/* Общий балл */}
+                <div className="flex items-center justify-between">
+                  <p className="text-muted-foreground">Общий балл конкурентов</p>
+                  <EEATBadge score={brief.eeatAnalysis.overallScore} />
+                </div>
+
+                <Separator />
+
+                {/* 4 компонента */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {(
+                    [
+                      { key: "experience",       label: "Experience",       data: brief.eeatAnalysis.experience },
+                      { key: "expertise",        label: "Expertise",        data: brief.eeatAnalysis.expertise },
+                      { key: "authoritativeness",label: "Authoritativeness",data: brief.eeatAnalysis.authoritativeness },
+                      { key: "trustworthiness",  label: "Trustworthiness",  data: brief.eeatAnalysis.trustworthiness },
+                    ] as const
+                  ).map(({ key, label, data }) => (
+                    <EEATComponent key={key} label={label} data={data} />
+                  ))}
+                </div>
+
+                <Separator />
+
+                {/* Вывод */}
+                <div>
+                  <p className="text-muted-foreground mb-1">Вывод</p>
+                  <p>{brief.eeatAnalysis.summary}</p>
+                </div>
+
+                <Separator />
+
+                {/* Рекомендации для копирайтера */}
+                <div>
+                  <p className="text-muted-foreground mb-2">Как усилить E-E-A-T в тексте</p>
+                  <ul className="space-y-1.5">
+                    {brief.eeatAnalysis.recommendations.map((rec, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                        {rec}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </>
+      )}
+    </div>
+  );
+}
+
+function EEATBadge({ score }: { score: number }) {
+  const color =
+    score >= 8 ? "bg-green-100 text-green-800" :
+    score >= 5 ? "bg-yellow-100 text-yellow-800" :
+                 "bg-red-100 text-red-800";
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${color}`}>
+      {score}/10
+    </span>
+  );
+}
+
+function EEATComponent({ label, data }: { label: string; data: EEATScore }) {
+  const pct = Math.round((data.score / 10) * 100);
+  const barColor =
+    data.score >= 8 ? "bg-green-500" :
+    data.score >= 5 ? "bg-yellow-500" :
+                      "bg-red-500";
+
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <div className="flex items-center justify-between">
+        <p className="font-medium text-xs">{label}</p>
+        <span className="text-xs font-semibold tabular-nums">{data.score}/10</span>
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
+      {data.signals.length > 0 && (
+        <div>
+          <p className="text-[11px] text-muted-foreground mb-1">Сигналы у конкурентов</p>
+          <ul className="space-y-0.5">
+            {data.signals.map((s, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-[11px]">
+                <span className="text-green-600 mt-0.5 shrink-0">✓</span>
+                {s}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {data.gaps.length > 0 && (
+        <div>
+          <p className="text-[11px] text-muted-foreground mb-1">Пробелы (ваш шанс)</p>
+          <ul className="space-y-0.5">
+            {data.gaps.map((g, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-[11px]">
+                <span className="text-yellow-600 mt-0.5 shrink-0">→</span>
+                {g}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
