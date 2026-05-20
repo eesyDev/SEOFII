@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { SEOBrief, EEATScore } from "@/lib/claude";
+import { ReportPoller } from "@/components/report-poller";
 
 const STATUS_CONFIG = {
   PENDING:    { label: "В очереди",       icon: Clock,         variant: "outline"     },
@@ -50,6 +51,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      <ReportPoller reportId={id} initialStatus={report.status} />
       {/* Хедер */}
       <div className="flex items-start gap-4">
         <Button variant="ghost" size="icon" asChild className="-ml-2 shrink-0">
@@ -94,7 +96,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
             <p className="text-sm text-muted-foreground max-w-sm">
               Анализируем конкурентов и ключевые слова. Обычно занимает 1–2 минуты.
             </p>
-            <p className="text-xs text-muted-foreground">Обнови страницу чтобы проверить готовность</p>
+            <p className="text-xs text-muted-foreground">Страница обновится автоматически</p>
           </CardContent>
         </Card>
       )}
