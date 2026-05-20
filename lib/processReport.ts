@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { fetchCompetitors, fetchKeywords } from "@/lib/dataforseo";
+import { fetchCompetitors, fetchKeywords, fetchDomainInfo } from "@/lib/dataforseo";
 import { generateSEOBrief } from "@/lib/claude";
 import type { Prisma } from "@prisma/client";
 
@@ -25,12 +25,17 @@ export async function processReport(reportId: string) {
       })),
     });
 
+    const competitorDomains = [...new Set(competitors.map((c) => c.domain))];
+
     const rawKeywords = competitors
       .flatMap((c) => c.title.toLowerCase().split(/\s+/))
       .filter((w) => w.length > 3)
       .slice(0, 20);
 
-    const keywordData = await fetchKeywords(rawKeywords);
+    const [keywordData, domainInfo] = await Promise.all([
+      fetchKeywords(rawKeywords),
+      fetchDomainInfo(competitorDomains),
+    ]);
 
     if (keywordData.length > 0) {
       await prisma.keyword.createMany({
@@ -44,7 +49,7 @@ export async function processReport(reportId: string) {
       });
     }
 
-    const { brief, costUsd } = await generateSEOBrief(report.url, competitors, keywordData);
+    const { brief, costUsd } = await generateSEOBrief(report.url, competitors, keywordData, domainInfo);
 
     await prisma.report.update({
       where: { id: reportId },

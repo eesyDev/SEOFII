@@ -7,10 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft, Clock, CheckCircle2, XCircle, Loader2,
-  BarChart2, Users, FileText, Lightbulb, ShieldCheck, Zap, Lock,
+  BarChart2, Users, FileText, Lightbulb, ShieldCheck, Zap, Lock, TrendingUp, Link2,
 } from "lucide-react";
 import Link from "next/link";
-import type { SEOBrief, EEATScore } from "@/lib/claude";
+import type { SEOBrief, EEATScore, ContentGap, LinkBuildingStrategy } from "@/lib/claude";
 import { ReportPoller } from "@/components/report-poller";
 
 const STATUS_CONFIG = {
@@ -193,15 +193,25 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
               <CardContent>
                 {report.competitors.length > 0 ? (
                   <div className="space-y-2">
-                    {report.competitors.map((c) => (
-                      <div key={c.id} className="flex items-start gap-2 text-sm">
-                        <span className="text-muted-foreground w-4 shrink-0 tabular-nums">{c.position}.</span>
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">{c.title}</p>
-                          <p className="text-muted-foreground truncate">{c.domain}</p>
+                    {report.competitors.map((c) => {
+                      const di = (brief.domainInfo as Record<string, { domainAge?: string; referringDomains?: number }> | undefined)?.[c.domain];
+                      return (
+                        <div key={c.id} className="flex items-start gap-2 text-sm">
+                          <span className="text-muted-foreground w-4 shrink-0 tabular-nums">{c.position}.</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium truncate">{c.title}</p>
+                            <p className="text-muted-foreground truncate">{c.domain}</p>
+                            {di && (
+                              <p className="text-xs text-muted-foreground/70 mt-0.5">
+                                {di.domainAge && <span>{di.domainAge}</span>}
+                                {di.domainAge && di.referringDomains !== undefined && <span className="mx-1">·</span>}
+                                {di.referringDomains !== undefined && <span>{di.referringDomains.toLocaleString()} RD</span>}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Нет данных</p>
@@ -236,6 +246,22 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
               </div>
             </CardContent>
           </Card>
+
+          {/* Контентные пробелы */}
+          {brief.contentGaps?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" /> Что создать дальше
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {brief.contentGaps.map((gap, i) => (
+                  <ContentGapRow key={i} gap={gap} />
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {/* E-E-A-T анализ */}
           {/* Баннер апгрейда — только для Free */}
@@ -339,6 +365,29 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           )}
         </>
       )}
+    </div>
+  );
+}
+
+const PRIORITY_CONFIG = {
+  high:   { label: "Высокий",  className: "bg-green-100 text-green-800" },
+  medium: { label: "Средний",  className: "bg-yellow-100 text-yellow-800" },
+  low:    { label: "Низкий",   className: "bg-slate-100 text-slate-600" },
+} as const;
+
+function ContentGapRow({ gap }: { gap: ContentGap }) {
+  const p = PRIORITY_CONFIG[gap.priority] ?? PRIORITY_CONFIG.low;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border p-3 text-sm">
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-medium leading-snug">{gap.topic}</p>
+        <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-semibold ${p.className}`}>
+          {p.label}
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground font-mono">{gap.suggestedSlug}</p>
+      <p className="text-muted-foreground">{gap.rationale}</p>
+      <p className="text-xs text-muted-foreground">Потенциал: {gap.trafficPotential}</p>
     </div>
   );
 }

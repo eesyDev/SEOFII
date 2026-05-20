@@ -2,7 +2,7 @@
 // Генерирует SEO ТЗ на основе данных о конкурентах и ключевых словах
 // Если ANTHROPIC_API_KEY не задан — возвращает мок-данные для разработки
 import Anthropic from "@anthropic-ai/sdk";
-import type { SerpResult, KeywordData } from "./dataforseo";
+import type { SerpResult, KeywordData, DomainInfo } from "./dataforseo";
 
 const USE_MOCK = !process.env.ANTHROPIC_API_KEY;
 
@@ -35,6 +35,28 @@ export interface EEATAnalysis {
   recommendations: string[];
 }
 
+export interface LinkBuildingRecommendation {
+  type: string;
+  description: string;
+  priority: "high" | "medium" | "low";
+  examples: string[];
+}
+
+export interface LinkBuildingStrategy {
+  summary: string;
+  targetDR: string;
+  recommendations: LinkBuildingRecommendation[];
+  anchorTextStrategy: string;
+}
+
+export interface ContentGap {
+  topic: string;
+  suggestedSlug: string;
+  priority: "high" | "medium" | "low";
+  trafficPotential: string;
+  rationale: string;
+}
+
 export interface SEOBrief {
   targetKeyword: string;
   recommendedTitle: string;
@@ -46,6 +68,8 @@ export interface SEOBrief {
   competitorInsights: string;
   additionalRecommendations: string[];
   eeatAnalysis: EEATAnalysis;
+  contentGaps: ContentGap[];
+  linkBuildingStrategy: LinkBuildingStrategy;
 }
 
 export interface ClaudeResult {
@@ -140,6 +164,74 @@ function getMockBrief(targetUrl: string, competitors: SerpResult[]): ClaudeResul
           "Включить реальные примеры и кейсы с цифрами для демонстрации опыта",
         ],
       },
+      linkBuildingStrategy: {
+        summary: "[МОК] Конкуренты имеют в среднем 500–2000 ссылающихся доменов с DR 30–60. Для конкуренции в топ-5 потребуется 80–150 качественных referring domains за 6–12 месяцев.",
+        targetDR: "30–60",
+        recommendations: [
+          {
+            type: "Гостевые посты",
+            description: "Публикации на отраслевых блогах и СМИ с естественными анкорами",
+            priority: "high",
+            examples: ["searchenginejournal.com", "moz.com/blog", "ahrefs.com/blog"],
+          },
+          {
+            type: "Niche Edits",
+            description: "Вставка ссылки в существующие релевантные статьи (быстрее гостевых постов)",
+            priority: "high",
+            examples: ["Статьи про SEO-оптимизацию", "Обзоры инструментов для SEO"],
+          },
+          {
+            type: "HARO / журналистские запросы",
+            description: "Ответы на запросы журналистов — ссылки с высокоавторитетных доменов",
+            priority: "medium",
+            examples: ["Forbes", "Entrepreneur", "Inc."],
+          },
+          {
+            type: "Каталоги и агрегаторы",
+            description: "Размещение в тематических каталогах инструментов и сервисов",
+            priority: "low",
+            examples: ["G2", "Capterra", "Product Hunt"],
+          },
+        ],
+        anchorTextStrategy: "60% брендовые анкоры, 25% общие («здесь», «подробнее»), 15% ключевые слова в разбавленном виде. Избегать точного вхождения основного ключа в анкоре более 5%.",
+      },
+      contentGaps: [
+        {
+          topic: "Чек-лист SEO-аудита сайта",
+          suggestedSlug: "/blog/seo-audit-checklist",
+          priority: "high",
+          trafficPotential: "1000–3000 посещений/мес",
+          rationale: "7 из 10 конкурентов имеют подобную страницу — это один из самых запрашиваемых форматов в нише",
+        },
+        {
+          topic: "SEO для e-commerce: пошаговое руководство",
+          suggestedSlug: "/blog/ecommerce-seo-guide",
+          priority: "high",
+          trafficPotential: "800–2000 посещений/мес",
+          rationale: "Высокий коммерческий интент, конкуренты закрывают эту тему отдельными лендингами",
+        },
+        {
+          topic: "Как выбрать семантическое ядро: инструменты и методология",
+          suggestedSlug: "/blog/keyword-research-guide",
+          priority: "medium",
+          trafficPotential: "500–1500 посещений/мес",
+          rationale: "Хорошо перелинковывается с основной темой, усиливает топикальный авторитет",
+        },
+        {
+          topic: "Внутренняя перелинковка: стратегия и примеры",
+          suggestedSlug: "/blog/internal-linking-strategy",
+          priority: "medium",
+          trafficPotential: "300–800 посещений/мес",
+          rationale: "Тема присутствует у конкурентов, но плохо раскрыта — есть возможность занять топ с качественным материалом",
+        },
+        {
+          topic: "Скорость сайта и Core Web Vitals: влияние на ранжирование",
+          suggestedSlug: "/blog/core-web-vitals-seo",
+          priority: "low",
+          trafficPotential: "200–600 посещений/мес",
+          rationale: "Актуальная тема после обновлений Google, поддерживает экспертный образ",
+        },
+      ],
     },
     costUsd: 0,
   };
@@ -152,12 +244,21 @@ function getMockBrief(targetUrl: string, competitors: SerpResult[]): ClaudeResul
 export async function generateSEOBrief(
   targetUrl: string,
   competitors: SerpResult[],
-  keywords: KeywordData[]
+  keywords: KeywordData[],
+  domainInfo: DomainInfo[] = []
 ): Promise<ClaudeResult> {
   if (USE_MOCK) return getMockBrief(targetUrl, competitors);
 
+  const domainMap = new Map(domainInfo.map((d) => [d.domain, d]));
+
   const competitorList = competitors
-    .map((c) => `${c.position}. ${c.title}\n   URL: ${c.url}\n   Snippet: ${c.snippet || "н/д"}`)
+    .map((c) => {
+      const di = domainMap.get(c.domain);
+      const meta = di
+        ? `   Возраст: ${di.domainAge ?? "н/д"} | Бэклинки: ${di.backlinks.toLocaleString()} | RD: ${di.referringDomains.toLocaleString()}`
+        : "";
+      return `${c.position}. ${c.title}\n   URL: ${c.url}\n   Snippet: ${c.snippet || "н/д"}${meta ? "\n" + meta : ""}`;
+    })
     .join("\n\n");
 
   const keywordList = keywords
@@ -204,11 +305,31 @@ eeatAnalysis должен содержать:
 - summary: краткий вывод об уровне E-E-A-T у конкурентов и возможностях для отстройки
 - recommendations: массив конкретных рекомендаций для копирайтера как усилить E-E-A-T (5-7 пунктов)
 
+3. Стратегия линкбилдинга (linkBuildingStrategy):
+На основе возраста доменов, количества бэклинков и referring domains конкурентов сформируй рекомендации по наращиванию ссылочной массы.
+
+linkBuildingStrategy должен содержать:
+- summary: краткий анализ ссылочного профиля конкурентов и что нужно для конкуренции (2–3 предложения)
+- targetDR: целевой диапазон DR/DA ссылающихся доменов (например "30–60")
+- recommendations: массив из 3–5 объектов { type, description, priority: "high"|"medium"|"low", examples: string[] }
+  (type — метод получения ссылок: гостевые посты, niche edits, HARO, цифровой PR и т.д.)
+- anchorTextStrategy: рекомендация по анкорам (доли брендовых / общих / ключевых)
+
+4. Контентные пробелы (contentGaps):
+На основе URL и заголовков конкурентов выяви темы/страницы, которые присутствуют у нескольких конкурентов, но отсутствуют у анализируемого сайта.
+
+contentGaps — массив из 4–6 объектов:
+- topic: название темы/страницы (конкретное, для копирайтера)
+- suggestedSlug: предлагаемый URL-slug страницы (например /blog/seo-audit-checklist)
+- priority: "high" | "medium" | "low" (по потенциалу трафика и частоте у конкурентов)
+- trafficPotential: примерная оценка трафика в месяц (например "500–2000 посещений/мес")
+- rationale: 1–2 предложения почему эту страницу стоит создать
+
 Отвечай ТОЛЬКО JSON, без markdown-обёртки.`;
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 2048,
+    max_tokens: 4000,
     messages: [{ role: "user", content: prompt }],
   });
 
