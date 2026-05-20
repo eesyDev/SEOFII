@@ -51,6 +51,10 @@ export async function processReport(reportId: string) {
 
     const { brief, costUsd } = await generateSEOBrief(report.url, competitors, keywordData, domainInfo);
 
+    brief.domainInfo = Object.fromEntries(
+      domainInfo.map((d) => [d.domain, { domainAge: d.domainAge, referringDomains: d.referringDomains }])
+    );
+
     await prisma.report.update({
       where: { id: reportId },
       data: {

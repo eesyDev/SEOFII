@@ -70,6 +70,7 @@ export interface SEOBrief {
   eeatAnalysis: EEATAnalysis;
   contentGaps: ContentGap[];
   linkBuildingStrategy: LinkBuildingStrategy;
+  domainInfo?: Record<string, { domainAge: string | null; referringDomains: number }>;
 }
 
 export interface ClaudeResult {

@@ -263,6 +263,35 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
             </Card>
           )}
 
+          {/* Линкбилдинг */}
+          {brief.linkBuildingStrategy && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Link2 className="h-4 w-4" /> Стратегия линкбилдинга
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm">
+                <p>{brief.linkBuildingStrategy.summary}</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">Целевой DR:</span>
+                  <Badge variant="secondary">{brief.linkBuildingStrategy.targetDR}</Badge>
+                </div>
+                <Separator />
+                <div className="space-y-3">
+                  {brief.linkBuildingStrategy.recommendations.map((rec, i) => (
+                    <LinkBuildingRow key={i} rec={rec} />
+                  ))}
+                </div>
+                <Separator />
+                <div>
+                  <p className="text-muted-foreground mb-1">Стратегия анкоров</p>
+                  <p>{brief.linkBuildingStrategy.anchorTextStrategy}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* E-E-A-T анализ */}
           {/* Баннер апгрейда — только для Free */}
           {isFree && (
@@ -374,6 +403,32 @@ const PRIORITY_CONFIG = {
   medium: { label: "Средний",  className: "bg-yellow-100 text-yellow-800" },
   low:    { label: "Низкий",   className: "bg-slate-100 text-slate-600" },
 } as const;
+
+const LINK_PRIORITY = {
+  high:   { label: "Высокий",  className: "bg-green-100 text-green-800" },
+  medium: { label: "Средний",  className: "bg-yellow-100 text-yellow-800" },
+  low:    { label: "Низкий",   className: "bg-slate-100 text-slate-600" },
+} as const;
+
+function LinkBuildingRow({ rec }: { rec: LinkBuildingStrategy["recommendations"][number] }) {
+  const p = LINK_PRIORITY[rec.priority] ?? LINK_PRIORITY.low;
+  return (
+    <div className="rounded-lg border p-3 space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-medium text-sm">{rec.type}</p>
+        <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-semibold ${p.className}`}>
+          {p.label}
+        </span>
+      </div>
+      <p className="text-sm text-muted-foreground">{rec.description}</p>
+      {rec.examples.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Примеры: {rec.examples.join(", ")}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function ContentGapRow({ gap }: { gap: ContentGap }) {
   const p = PRIORITY_CONFIG[gap.priority] ?? PRIORITY_CONFIG.low;
