@@ -7,18 +7,39 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft, Clock, CheckCircle2, XCircle, Loader2,
-  BarChart2, Users, FileText, Lightbulb, ShieldCheck, Zap, Lock, TrendingUp, Link2,
+  FileText, Lightbulb, ShieldCheck, Zap, Lock, TrendingUp, Link2,
 } from "lucide-react";
 import Link from "next/link";
 import type { SEOBrief, EEATScore, ContentGap, LinkBuildingStrategy } from "@/lib/claude";
+import type { AnalyticsResult } from "@/lib/analytics";
+import type { SerpResult, DomainInfo } from "@/lib/dataforseo";
+import type { GscRow } from "@/lib/gsc";
 import { ReportPoller } from "@/components/report-poller";
+import { SummaryCards } from "@/components/report/summary-cards";
+import { VolumeChart, GscPositionsChart } from "@/components/report/report-charts";
+import { KeywordTable } from "@/components/report/keyword-table";
+
+// ─────────────────────────────────────────
+// ТИПЫ
+// ─────────────────────────────────────────
+
+interface ReportResult {
+  brief: SEOBrief;
+  analytics?: AnalyticsResult;
+  competitors?: SerpResult[];
+  domainInfo?: Record<string, DomainInfo>;
+}
 
 const STATUS_CONFIG = {
-  PENDING:    { label: "В очереди",       icon: Clock,         variant: "outline"     },
-  PROCESSING: { label: "Обрабатывается",  icon: Loader2,       variant: "secondary"   },
-  DONE:       { label: "Готов",           icon: CheckCircle2,  variant: "default"     },
-  FAILED:     { label: "Ошибка",          icon: XCircle,       variant: "destructive" },
+  PENDING:    { label: "В очереди",       icon: Clock,        variant: "outline"     },
+  PROCESSING: { label: "Обрабатывается",  icon: Loader2,      variant: "secondary"   },
+  DONE:       { label: "Готов",           icon: CheckCircle2, variant: "default"     },
+  FAILED:     { label: "Ошибка",          icon: XCircle,      variant: "destructive" },
 } as const;
+
+// ─────────────────────────────────────────
+// СТРАНИЦА
+// ─────────────────────────────────────────
 
 export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -32,7 +53,6 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       where: { id, userId },
       include: {
         competitors: { orderBy: { position: "asc" } },
-        keywords:    { orderBy: { volume: "desc" }, take: 20 },
         project:     { select: { name: true } },
       },
     }),
@@ -46,12 +66,17 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
   const config = STATUS_CONFIG[report.status];
   const StatusIcon = config.icon;
-  const brief = report.result as SEOBrief | null;
+  const result = report.result as ReportResult | null;
+  const brief = result?.brief ?? null;
+  const analytics = result?.analytics ?? null;
+  const gscRows = (report.gscData as GscRow[] | null) ?? [];
+  const hasGsc = gscRows.length > 0;
   const isFree = !user || user.plan === "FREE";
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <ReportPoller reportId={id} initialStatus={report.status} />
+
       {/* Хедер */}
       <div className="flex items-start gap-4">
         <Button variant="ghost" size="icon" asChild className="-ml-2 shrink-0">
@@ -71,6 +96,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
               day: "numeric", month: "long", year: "numeric",
             })}
             {report.costUsd && ` · $${Number(report.costUsd).toFixed(4)}`}
+            {hasGsc && <span className="ml-1">· GSC ✓</span>}
           </p>
         </div>
       </div>
@@ -80,9 +106,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         <Card className="border-destructive/50 bg-destructive/5">
           <CardContent className="pt-4">
             <p className="text-sm text-destructive font-medium">Ошибка генерации</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {report.errorMessage ?? "Неизвестная ошибка"}
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">{report.errorMessage ?? "Неизвестная ошибка"}</p>
           </CardContent>
         </Card>
       )}
@@ -102,295 +126,279 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       )}
 
       {/* Готовый отчёт */}
-      {report.status === "DONE" && brief && (
+      {report.status === "DONE" && result && (
         <>
-          {/* Мета-теги */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-4 w-4" /> Мета-данные
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div>
-                <p className="text-muted-foreground mb-1">Title</p>
-                <p className="font-medium">{brief.recommendedTitle}</p>
-              </div>
-              <Separator />
-              <div>
-                <p className="text-muted-foreground mb-1">Meta Description</p>
-                <p>{brief.recommendedMetaDescription}</p>
-              </div>
-              <Separator />
-              <div>
-                <p className="text-muted-foreground mb-1">H1</p>
-                <p className="font-medium">{brief.recommendedH1}</p>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <p className="text-muted-foreground">Основной ключевой запрос</p>
-                <Badge variant="secondary">{brief.targetKeyword}</Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <p className="text-muted-foreground">Рекомендуемый объём</p>
-                <span className="font-medium">{brief.wordCountRecommendation.toLocaleString()} слов</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Структура контента */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-4 w-4" /> Структура статьи
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {brief.contentStructure.map((section, i) => (
-                <div key={i} className="flex gap-3">
-                  <span className="text-muted-foreground text-sm w-5 shrink-0 pt-0.5">{i + 1}.</span>
-                  <div>
-                    <p className="text-sm font-medium">{section.title}</p>
-                    <p className="text-sm text-muted-foreground mt-0.5">{section.content}</p>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Ключевые слова + конкуренты */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart2 className="h-4 w-4" /> Ключевые слова
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {report.keywords.length > 0 ? (
-                  <div className="space-y-2">
-                    {report.keywords.map((kw) => (
-                      <div key={kw.id} className="flex items-center justify-between text-sm">
-                        <span className="font-medium">{kw.keyword}</span>
-                        <span className="text-muted-foreground tabular-nums">
-                          {kw.volume.toLocaleString()} / мес
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Нет данных</p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Users className="h-4 w-4" /> Конкуренты
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {report.competitors.length > 0 ? (
-                  <div className="space-y-2">
-                    {report.competitors.map((c) => {
-                      const di = (brief.domainInfo as Record<string, { domainAge?: string; referringDomains?: number }> | undefined)?.[c.domain];
-                      return (
-                        <div key={c.id} className="flex items-start gap-2 text-sm">
-                          <span className="text-muted-foreground w-4 shrink-0 tabular-nums">{c.position}.</span>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium truncate">{c.title}</p>
-                            <p className="text-muted-foreground truncate">{c.domain}</p>
-                            {di && (
-                              <p className="text-xs text-muted-foreground/70 mt-0.5">
-                                {di.domainAge && <span>{di.domainAge}</span>}
-                                {di.domainAge && di.referringDomains !== undefined && <span className="mx-1">·</span>}
-                                {di.referringDomains !== undefined && <span>{di.referringDomains.toLocaleString()} RD</span>}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Нет данных</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Рекомендации */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Lightbulb className="h-4 w-4" /> Рекомендации
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div>
-                <p className="text-muted-foreground mb-1">Анализ конкурентов</p>
-                <p>{brief.competitorInsights}</p>
-              </div>
-              <Separator />
-              <div>
-                <p className="text-muted-foreground mb-2">Дополнительно</p>
-                <ul className="space-y-1.5">
-                  {brief.additionalRecommendations.map((rec, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                      {rec}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Контентные пробелы */}
-          {brief.contentGaps?.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" /> Что создать дальше
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {brief.contentGaps.map((gap, i) => (
-                  <ContentGapRow key={i} gap={gap} />
-                ))}
-              </CardContent>
-            </Card>
+          {/* ── 1. Summary cards ── */}
+          {analytics && (
+            <SummaryCards summary={analytics.summary} hasGsc={hasGsc} />
           )}
 
-          {/* Линкбилдинг */}
-          {brief.linkBuildingStrategy && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Link2 className="h-4 w-4" /> Стратегия линкбилдинга
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                <p>{brief.linkBuildingStrategy.summary}</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Целевой DR:</span>
-                  <Badge variant="secondary">{brief.linkBuildingStrategy.targetDR}</Badge>
-                </div>
-                <Separator />
-                <div className="space-y-3">
-                  {brief.linkBuildingStrategy.recommendations.map((rec, i) => (
-                    <LinkBuildingRow key={i} rec={rec} />
-                  ))}
-                </div>
-                <Separator />
-                <div>
-                  <p className="text-muted-foreground mb-1">Стратегия анкоров</p>
-                  <p>{brief.linkBuildingStrategy.anchorTextStrategy}</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* E-E-A-T анализ */}
-          {/* Баннер апгрейда — только для Free */}
-          {isFree && (
-            <div className="relative rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-6 overflow-hidden">
-              {/* Декоративный фон */}
-              <div className="absolute -right-6 -top-6 h-32 w-32 rounded-full bg-primary/10" />
-              <div className="absolute -right-2 -bottom-4 h-20 w-20 rounded-full bg-primary/5" />
-
-              <div className="relative">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                    <Zap className="h-4 w-4 text-primary" />
-                  </div>
-                  <p className="font-semibold text-base">Получить полный отчёт</p>
-                </div>
-
-                <p className="text-sm text-muted-foreground mb-4">
-                  Это базовый отчёт. Pro-версия даёт в 3× больше данных для копирайтера:
-                </p>
-
-                <ul className="space-y-2 mb-5">
-                  {[
-                    "Разбор каждого конкурента отдельно — структура, объём, сильные стороны",
-                    "LSI-кластеры и семантическое ядро по теме",
-                    "Рекомендации по schema.org разметке для сниппетов",
-                    "Анализ контентных пробелов — что есть у конкурентов, чего нет у вас",
-                    "Приоритизированный план: с чего начать, что принесёт трафик быстрее",
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      <Lock className="h-3.5 w-3.5 text-primary/60 mt-0.5 shrink-0" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <Button asChild size="sm" className="gap-2">
-                  <Link href="/billing">
-                    <Zap className="h-4 w-4" />
-                    Перейти на Pro
-                  </Link>
-                </Button>
-              </div>
+          {/* ── 2. Charts ── */}
+          {analytics && (
+            <div className={`grid gap-4 ${hasGsc ? "lg:grid-cols-2" : ""}`}>
+              <VolumeChart keywords={analytics.allKeywords} />
+              {hasGsc && <GscPositionsChart gscRows={gscRows} />}
             </div>
           )}
 
-          {brief.eeatAnalysis && (
+          {/* ── 3. Keyword table ── */}
+          {analytics && analytics.allKeywords.length > 0 && (
+            <KeywordTable keywords={analytics.allKeywords} />
+          )}
+
+          {/* ── 4. Конкуренты ── */}
+          {report.competitors.length > 0 && brief && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4" /> E-E-A-T анализ
+                  Конкуренты в топ-10
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-5 text-sm">
-                {/* Общий балл */}
-                <div className="flex items-center justify-between">
-                  <p className="text-muted-foreground">Общий балл конкурентов</p>
-                  <EEATBadge score={brief.eeatAnalysis.overallScore} />
-                </div>
-
-                <Separator />
-
-                {/* 4 компонента */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {(
-                    [
-                      { key: "experience",       label: "Experience",       data: brief.eeatAnalysis.experience },
-                      { key: "expertise",        label: "Expertise",        data: brief.eeatAnalysis.expertise },
-                      { key: "authoritativeness",label: "Authoritativeness",data: brief.eeatAnalysis.authoritativeness },
-                      { key: "trustworthiness",  label: "Trustworthiness",  data: brief.eeatAnalysis.trustworthiness },
-                    ] as const
-                  ).map(({ key, label, data }) => (
-                    <EEATComponent key={key} label={label} data={data} />
-                  ))}
-                </div>
-
-                <Separator />
-
-                {/* Вывод */}
-                <div>
-                  <p className="text-muted-foreground mb-1">Вывод</p>
-                  <p>{brief.eeatAnalysis.summary}</p>
-                </div>
-
-                <Separator />
-
-                {/* Рекомендации для копирайтера */}
-                <div>
-                  <p className="text-muted-foreground mb-2">Как усилить E-E-A-T в тексте</p>
-                  <ul className="space-y-1.5">
-                    {brief.eeatAnalysis.recommendations.map((rec, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                        {rec}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              <CardContent className="space-y-2">
+                {report.competitors.map((c) => {
+                  const di = (brief.domainInfo as Record<string, { domainAge?: string; referringDomains?: number }> | undefined)?.[c.domain];
+                  return (
+                    <div key={c.id} className="flex items-start gap-3 rounded-lg border p-3 text-sm">
+                      <span className="text-muted-foreground w-5 shrink-0 tabular-nums font-medium">{c.position}.</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{c.title}</p>
+                        <a
+                          href={c.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-muted-foreground hover:underline truncate block"
+                        >
+                          {c.domain}
+                        </a>
+                        {di && (
+                          <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                            {di.domainAge && <span>Возраст: {di.domainAge}</span>}
+                            {di.referringDomains !== undefined && <span>{di.referringDomains.toLocaleString()} RD</span>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
+          )}
+
+          {/* ── 5. Бриф от Claude ── */}
+          {brief && (
+            <>
+              {/* Мета-теги */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="h-4 w-4" /> Мета-данные
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div>
+                    <p className="text-muted-foreground mb-1">Title</p>
+                    <p className="font-medium">{brief.recommendedTitle}</p>
+                  </div>
+                  <Separator />
+                  <div>
+                    <p className="text-muted-foreground mb-1">Meta Description</p>
+                    <p>{brief.recommendedMetaDescription}</p>
+                  </div>
+                  <Separator />
+                  <div>
+                    <p className="text-muted-foreground mb-1">H1</p>
+                    <p className="font-medium">{brief.recommendedH1}</p>
+                  </div>
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <p className="text-muted-foreground">Основной ключевой запрос</p>
+                    <Badge variant="secondary">{brief.targetKeyword}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-muted-foreground">Рекомендуемый объём</p>
+                    <span className="font-medium">{brief.wordCountRecommendation.toLocaleString()} слов</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Структура контента */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="h-4 w-4" /> Структура статьи
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {brief.contentStructure.map((section, i) => (
+                    <div key={i} className="flex gap-3">
+                      <span className="text-muted-foreground text-sm w-5 shrink-0 pt-0.5">{i + 1}.</span>
+                      <div>
+                        <p className="text-sm font-medium">{section.title}</p>
+                        <p className="text-sm text-muted-foreground mt-0.5">{section.content}</p>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Рекомендации */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Lightbulb className="h-4 w-4" /> Рекомендации
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div>
+                    <p className="text-muted-foreground mb-1">Анализ конкурентов</p>
+                    <p>{brief.competitorInsights}</p>
+                  </div>
+                  <Separator />
+                  <div>
+                    <p className="text-muted-foreground mb-2">Дополнительно</p>
+                    <ul className="space-y-1.5">
+                      {brief.additionalRecommendations.map((rec, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Контентные пробелы */}
+              {brief.contentGaps?.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4" /> Что создать дальше
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {brief.contentGaps.map((gap, i) => (
+                      <ContentGapRow key={i} gap={gap} />
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Линкбилдинг */}
+              {brief.linkBuildingStrategy && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Link2 className="h-4 w-4" /> Стратегия линкбилдинга
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 text-sm">
+                    <p>{brief.linkBuildingStrategy.summary}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Целевой DR:</span>
+                      <Badge variant="secondary">{brief.linkBuildingStrategy.targetDR}</Badge>
+                    </div>
+                    <Separator />
+                    <div className="space-y-3">
+                      {brief.linkBuildingStrategy.recommendations.map((rec, i) => (
+                        <LinkBuildingRow key={i} rec={rec} />
+                      ))}
+                    </div>
+                    <Separator />
+                    <div>
+                      <p className="text-muted-foreground mb-1">Стратегия анкоров</p>
+                      <p>{brief.linkBuildingStrategy.anchorTextStrategy}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Баннер апгрейда — только для Free */}
+              {isFree && (
+                <div className="relative rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-6 overflow-hidden">
+                  <div className="absolute -right-6 -top-6 h-32 w-32 rounded-full bg-primary/10" />
+                  <div className="absolute -right-2 -bottom-4 h-20 w-20 rounded-full bg-primary/5" />
+                  <div className="relative">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                        <Zap className="h-4 w-4 text-primary" />
+                      </div>
+                      <p className="font-semibold text-base">Получить полный отчёт</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Это базовый отчёт. Pro-версия даёт в 3× больше данных для копирайтера:
+                    </p>
+                    <ul className="space-y-2 mb-5">
+                      {[
+                        "Разбор каждого конкурента отдельно — структура, объём, сильные стороны",
+                        "LSI-кластеры и семантическое ядро по теме",
+                        "Рекомендации по schema.org разметке для сниппетов",
+                        "Анализ контентных пробелов — что есть у конкурентов, чего нет у вас",
+                        "Приоритизированный план: с чего начать, что принесёт трафик быстрее",
+                      ].map((item, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm">
+                          <Lock className="h-3.5 w-3.5 text-primary/60 mt-0.5 shrink-0" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <Button asChild size="sm" className="gap-2">
+                      <Link href="/billing">
+                        <Zap className="h-4 w-4" />
+                        Перейти на Pro
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* E-E-A-T */}
+              {brief.eeatAnalysis && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4" /> E-E-A-T анализ
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-5 text-sm">
+                    <div className="flex items-center justify-between">
+                      <p className="text-muted-foreground">Общий балл конкурентов</p>
+                      <EEATBadge score={brief.eeatAnalysis.overallScore} />
+                    </div>
+                    <Separator />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {(
+                        [
+                          { key: "experience",        label: "Experience",        data: brief.eeatAnalysis.experience },
+                          { key: "expertise",         label: "Expertise",         data: brief.eeatAnalysis.expertise },
+                          { key: "authoritativeness", label: "Authoritativeness", data: brief.eeatAnalysis.authoritativeness },
+                          { key: "trustworthiness",   label: "Trustworthiness",   data: brief.eeatAnalysis.trustworthiness },
+                        ] as const
+                      ).map(({ key, label, data }) => (
+                        <EEATComponent key={key} label={label} data={data} />
+                      ))}
+                    </div>
+                    <Separator />
+                    <div>
+                      <p className="text-muted-foreground mb-1">Вывод</p>
+                      <p>{brief.eeatAnalysis.summary}</p>
+                    </div>
+                    <Separator />
+                    <div>
+                      <p className="text-muted-foreground mb-2">Как усилить E-E-A-T в тексте</p>
+                      <ul className="space-y-1.5">
+                        {brief.eeatAnalysis.recommendations.map((rec, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                            {rec}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
         </>
       )}
@@ -398,20 +406,18 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   );
 }
 
-const PRIORITY_CONFIG = {
-  high:   { label: "Высокий",  className: "bg-green-100 text-green-800" },
-  medium: { label: "Средний",  className: "bg-yellow-100 text-yellow-800" },
-  low:    { label: "Низкий",   className: "bg-slate-100 text-slate-600" },
-} as const;
+// ─────────────────────────────────────────
+// ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ
+// ─────────────────────────────────────────
 
-const LINK_PRIORITY = {
-  high:   { label: "Высокий",  className: "bg-green-100 text-green-800" },
-  medium: { label: "Средний",  className: "bg-yellow-100 text-yellow-800" },
-  low:    { label: "Низкий",   className: "bg-slate-100 text-slate-600" },
+const PRIORITY_CONFIG = {
+  high:   { label: "Высокий", className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
+  medium: { label: "Средний", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
+  low:    { label: "Низкий",  className: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" },
 } as const;
 
 function LinkBuildingRow({ rec }: { rec: LinkBuildingStrategy["recommendations"][number] }) {
-  const p = LINK_PRIORITY[rec.priority] ?? LINK_PRIORITY.low;
+  const p = PRIORITY_CONFIG[rec.priority] ?? PRIORITY_CONFIG.low;
   return (
     <div className="rounded-lg border p-3 space-y-1.5">
       <div className="flex items-center justify-between gap-2">
@@ -422,9 +428,7 @@ function LinkBuildingRow({ rec }: { rec: LinkBuildingStrategy["recommendations"]
       </div>
       <p className="text-sm text-muted-foreground">{rec.description}</p>
       {rec.examples.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          Примеры: {rec.examples.join(", ")}
-        </p>
+        <p className="text-xs text-muted-foreground">Примеры: {rec.examples.join(", ")}</p>
       )}
     </div>
   );
@@ -449,9 +453,9 @@ function ContentGapRow({ gap }: { gap: ContentGap }) {
 
 function EEATBadge({ score }: { score: number }) {
   const color =
-    score >= 8 ? "bg-green-100 text-green-800" :
-    score >= 5 ? "bg-yellow-100 text-yellow-800" :
-                 "bg-red-100 text-red-800";
+    score >= 8 ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" :
+    score >= 5 ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" :
+                 "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${color}`}>
       {score}/10
@@ -465,7 +469,6 @@ function EEATComponent({ label, data }: { label: string; data: EEATScore }) {
     data.score >= 8 ? "bg-green-500" :
     data.score >= 5 ? "bg-yellow-500" :
                       "bg-red-500";
-
   return (
     <div className="space-y-2 rounded-lg border p-3">
       <div className="flex items-center justify-between">
@@ -481,8 +484,7 @@ function EEATComponent({ label, data }: { label: string; data: EEATScore }) {
           <ul className="space-y-0.5">
             {data.signals.map((s, i) => (
               <li key={i} className="flex items-start gap-1.5 text-[11px]">
-                <span className="text-green-600 mt-0.5 shrink-0">✓</span>
-                {s}
+                <span className="text-green-600 mt-0.5 shrink-0">✓</span>{s}
               </li>
             ))}
           </ul>
@@ -494,8 +496,7 @@ function EEATComponent({ label, data }: { label: string; data: EEATScore }) {
           <ul className="space-y-0.5">
             {data.gaps.map((g, i) => (
               <li key={i} className="flex items-start gap-1.5 text-[11px]">
-                <span className="text-yellow-600 mt-0.5 shrink-0">→</span>
-                {g}
+                <span className="text-yellow-600 mt-0.5 shrink-0">→</span>{g}
               </li>
             ))}
           </ul>
