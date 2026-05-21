@@ -66,7 +66,14 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
   const config = STATUS_CONFIG[report.status];
   const StatusIcon = config.icon;
-  const result = report.result as ReportResult | null;
+  // Поддержка старого формата: result = SEOBrief напрямую (до шага 2)
+  // Нового формата: result = { brief, analytics, competitors, domainInfo }
+  const rawResult = report.result as any;
+  const result: ReportResult | null = rawResult
+    ? rawResult.brief && typeof rawResult.brief === "object"
+      ? (rawResult as ReportResult)
+      : { brief: rawResult as SEOBrief }
+    : null;
   const brief = result?.brief ?? null;
   const analytics = result?.analytics ?? null;
   const gscRows = (report.gscData as GscRow[] | null) ?? [];
