@@ -3,6 +3,8 @@
 // Если ANTHROPIC_API_KEY не задан — возвращает мок-данные для разработки
 import Anthropic from "@anthropic-ai/sdk";
 import type { SerpResult, KeywordData, DomainInfo } from "./dataforseo";
+import type { AnalyticsResult } from "./analytics";
+import type { GscRow } from "./gsc";
 
 const USE_MOCK = !process.env.ANTHROPIC_API_KEY;
 
@@ -246,7 +248,9 @@ export async function generateSEOBrief(
   targetUrl: string,
   competitors: SerpResult[],
   keywords: KeywordData[],
-  domainInfo: DomainInfo[] = []
+  domainInfo: DomainInfo[] = [],
+  analytics?: AnalyticsResult,
+  gscRows: GscRow[] = []
 ): Promise<ClaudeResult> {
   if (USE_MOCK) return getMockBrief(targetUrl, competitors);
 
@@ -267,6 +271,42 @@ export async function generateSEOBrief(
     .map((k) => `- ${k.keyword}: объём ${k.volume}, CPC $${k.cpc}, конкуренция ${k.competition}`)
     .join("\n");
 
+  // GSC-контекст для промпта
+  let gscBlock = "";
+  if (analytics && gscRows.length > 0) {
+    const top3 = analytics.allKeywords
+      .filter((k) => k.tag === "top3")
+      .slice(0, 10)
+      .map((k) => `- "${k.keyword}": позиция ${k.gscPosition?.toFixed(1)}, ${k.gscClicks} кликов/мес`)
+      .join("\n");
+
+    const quickWinsList = analytics.quickWins
+      .slice(0, 10)
+      .map((r) => `- "${r.query}": позиция ${r.position.toFixed(1)}, ${r.impressions} показов/мес, ${r.clicks} кликов`)
+      .join("\n");
+
+    const gapList = analytics.gapKeywords
+      .slice(0, 15)
+      .map((k) => `- "${k.keyword}" (volume: ${k.volume}, у ${k.occurrences} конкурентов в топе)`)
+      .join("\n");
+
+    gscBlock = `
+ДАННЫЕ GOOGLE SEARCH CONSOLE:
+Всего запросов в GSC: ${gscRows.length}, кликов: ${analytics.summary.gscTotalClicks.toLocaleString()}, показов: ${analytics.summary.gscTotalImpressions.toLocaleString()}
+
+Уже в топ-4 (укрепить позиции):
+${top3 || "нет данных"}
+
+Quick Wins — позиции 5–20 (приоритет доработки):
+${quickWinsList || "нет данных"}
+
+Gap-ключи — конкуренты ранжируются, у нас нет:
+${gapList || "нет данных"}
+
+УЧТИ ЭТИ ДАННЫЕ В БРИФЕ: упомяни quick wins как приоритеты доработки, gap-ключи — как новые темы для охвата. Для top-3 ключей предложи как удержать и улучшить позиции.
+`;
+  }
+
   const prompt = `Ты — опытный SEO-специалист. На основе анализа конкурентов создай детальное ТЗ для копирайтера.
 
 АНАЛИЗИРУЕМАЯ СТРАНИЦА: ${targetUrl}
@@ -276,7 +316,7 @@ ${competitorList}
 
 КЛЮЧЕВЫЕ СЛОВА:
 ${keywordList}
-
+${gscBlock}
 Создай структурированное SEO ТЗ в формате JSON со следующими полями:
 
 1. Основные SEO-параметры:
