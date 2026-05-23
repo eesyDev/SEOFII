@@ -10,7 +10,7 @@ import {
   FileText, Lightbulb, ShieldCheck, Zap, Lock, TrendingUp, Link2,
 } from "lucide-react";
 import Link from "next/link";
-import type { SEOBrief, EEATScore, ContentGap, LinkBuildingStrategy } from "@/lib/claude";
+import type { SEOBrief, EEATScore, ContentGap, LinkBuildingStrategy, CompetitorComparison, QuickFix, BlockRow } from "@/lib/claude";
 import type { AnalyticsResult } from "@/lib/analytics";
 import type { SerpResult, DomainInfo } from "@/lib/dataforseo";
 import type { GscRow } from "@/lib/gsc";
@@ -18,6 +18,9 @@ import { ReportPoller } from "@/components/report-poller";
 import { SummaryCards } from "@/components/report/summary-cards";
 import { VolumeChart, GscPositionsChart } from "@/components/report/report-charts";
 import { KeywordTable } from "@/components/report/keyword-table";
+import { CompetitorComparisonSection } from "@/components/report/competitor-comparison";
+import { QuickFixesSection } from "@/components/report/quick-fixes";
+import { BlockMatrixSection } from "@/components/report/block-matrix";
 
 // ─────────────────────────────────────────
 // ТИПЫ
@@ -28,6 +31,9 @@ interface ReportResult {
   analytics?: AnalyticsResult;
   competitors?: SerpResult[];
   domainInfo?: Record<string, DomainInfo>;
+  comparisons?: CompetitorComparison[];
+  blockMatrix?: BlockRow[];
+  quickFixes?: QuickFix[];
 }
 
 const STATUS_CONFIG = {
@@ -76,6 +82,9 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
     : null;
   const brief = result?.brief ?? null;
   const analytics = result?.analytics ?? null;
+  const comparisons = result?.comparisons ?? [];
+  const blockMatrix = result?.blockMatrix ?? [];
+  const quickFixes = result?.quickFixes ?? [];
   const gscRows = (report.gscData as GscRow[] | null) ?? [];
   const hasGsc = gscRows.length > 0;
   const isFree = !user || user.plan === "FREE";
@@ -140,7 +149,25 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
             <SummaryCards summary={analytics.summary} hasGsc={hasGsc} />
           )}
 
-          {/* ── 2. Charts ── */}
+          {/* ── 2. Почему конкурент выше ── */}
+          {comparisons.length > 0 && (
+            <CompetitorComparisonSection comparisons={comparisons} isPro={!isFree} />
+          )}
+
+          {/* ── 3. Матрица блоков ── */}
+          {blockMatrix.length > 0 && (
+            <BlockMatrixSection
+              blockMatrix={blockMatrix}
+              competitorDomains={(result?.competitors ?? []).slice(0, comparisons.length).map((c) => c.domain)}
+            />
+          )}
+
+          {/* ── 4. Что починить за выходные ── */}
+          {quickFixes.length > 0 && (
+            <QuickFixesSection quickFixes={quickFixes} />
+          )}
+
+          {/* ── 4. Charts ── */}
           {analytics && (
             <div className={`grid gap-4 ${hasGsc ? "lg:grid-cols-2" : ""}`}>
               <VolumeChart keywords={analytics.allKeywords} />
@@ -148,12 +175,12 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
             </div>
           )}
 
-          {/* ── 3. Keyword table ── */}
+          {/* ── 5. Keyword table ── */}
           {analytics && analytics.allKeywords.length > 0 && (
             <KeywordTable keywords={analytics.allKeywords} />
           )}
 
-          {/* ── 4. Конкуренты ── */}
+          {/* ── 6. Конкуренты ── */}
           {report.competitors.length > 0 && brief && (
             <Card>
               <CardHeader>

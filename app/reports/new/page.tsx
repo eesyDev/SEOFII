@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, Loader2, AlertCircle, Upload, CheckCircle2, X } from "lucide-react";
-import { parseGscCsv, type GscRow } from "@/lib/gsc";
+import { Search, Loader2, AlertCircle, Upload, CheckCircle2, X, Info } from "lucide-react";
+import { parseGscCsvDetailed, type GscRow } from "@/lib/gsc";
 
 export default function NewReportPage() {
   const router = useRouter();
@@ -17,6 +17,7 @@ export default function NewReportPage() {
   const [gscRows, setGscRows] = useState<GscRow[] | null>(null);
   const [gscFileName, setGscFileName] = useState("");
   const [gscError, setGscError] = useState("");
+  const [showNoGscWarning, setShowNoGscWarning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -30,9 +31,13 @@ export default function NewReportPage() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      const rows = parseGscCsv(text);
+      const { rows, debugInfo } = parseGscCsvDetailed(text);
       if (rows.length === 0) {
-        setGscError("Не удалось прочитать файл. Убедись, что это экспорт из GSC (Запросы → Экспорт → CSV).");
+        setGscError(
+          debugInfo
+            ? `Не удалось прочитать файл: ${debugInfo}`
+            : "Не удалось прочитать файл. Убедись, что это экспорт из GSC (Запросы → Экспорт → CSV)."
+        );
         setGscFileName("");
       } else {
         setGscRows(rows);
@@ -48,9 +53,9 @@ export default function NewReportPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function submitReport() {
     setLoading(true);
+    setShowNoGscWarning(false);
     setError("");
 
     const res = await fetch("/api/reports", {
@@ -72,6 +77,15 @@ export default function NewReportPage() {
     }
 
     router.push(`/reports/${data.reportId}`);
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!gscRows) {
+      setShowNoGscWarning(true);
+      return;
+    }
+    submitReport();
   }
 
   return (
@@ -161,6 +175,39 @@ export default function NewReportPage() {
               <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                 {error}
+              </div>
+            )}
+
+            {showNoGscWarning && (
+              <div className="rounded-lg border border-yellow-200 bg-yellow-50 dark:border-yellow-800/50 dark:bg-yellow-900/20 px-4 py-3 space-y-2">
+                <div className="flex items-start gap-2 text-sm font-medium text-yellow-800 dark:text-yellow-300">
+                  <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>Ты не загрузил CSV из Google Search Console</span>
+                </div>
+                <p className="text-xs text-yellow-700 dark:text-yellow-400 pl-6">
+                  Без него отчёт не покажет quick wins, реальные позиции и данные по кликам.
+                  Результат будет основан только на анализе конкурентов.
+                </p>
+                <div className="flex gap-2 pl-6 pt-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-7 border-yellow-300 dark:border-yellow-700"
+                    onClick={() => { setShowNoGscWarning(false); fileInputRef.current?.click(); }}
+                  >
+                    Загрузить CSV
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs h-7 text-yellow-800 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/40"
+                    onClick={submitReport}
+                  >
+                    Продолжить без CSV
+                  </Button>
+                </div>
               </div>
             )}
 
