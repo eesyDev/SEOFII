@@ -6,7 +6,11 @@ import { prisma } from "@/lib/prisma";
 const schema = z.object({
   name: z.string().min(2, "Имя минимум 2 символа"),
   email: z.string().email("Некорректный email"),
-  password: z.string().min(6, "Пароль минимум 6 символов"),
+  password: z
+    .string()
+    .min(8, "Пароль минимум 8 символов")
+    .regex(/[a-zA-Zа-яА-ЯёЁ]/, "Пароль должен содержать хотя бы одну букву")
+    .regex(/\d/, "Пароль должен содержать хотя бы одну цифру"),
 });
 
 export async function POST(req: NextRequest) {

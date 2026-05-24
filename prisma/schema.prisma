@@ -142,6 +142,7 @@ model Report {
   url          String
   status       ReportStatus @default(PENDING)
   result       Json?        // готовое ТЗ от Claude
+  gscData      Json?        // данные из Google Search Console CSV
   costUsd      Decimal?     @db.Decimal(8, 6) // стоимость запроса к Claude
   errorMessage String?      // причина ошибки если status = FAILED
   createdAt    DateTime     @default(now())

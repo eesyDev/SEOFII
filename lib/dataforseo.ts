@@ -24,6 +24,7 @@ export interface SerpResult {
   position: number;
   title: string;
   url: string;
+  snippet: string;
 }
 
 export interface KeywordData {
@@ -33,9 +34,30 @@ export interface KeywordData {
   competition: number;
 }
 
+export interface DomainInfo {
+  domain: string;
+  domainAge: string | null;       // "3 года 4 месяца" или null
+  registeredAt: string | null;    // ISO date
+  backlinks: number;
+  referringDomains: number;
+}
+
 // ─────────────────────────────────────────
 // SERP: топ-10 конкурентов по URL
 // ─────────────────────────────────────────
+
+const MOCK_SNIPPETS = [
+  "Written by certified SEO expert John Smith with 10+ years of experience. Updated monthly with latest Google algorithm insights.",
+  "Our editorial team reviews every piece. Sources cited from Google Search Central, Moz, and Ahrefs research studies.",
+  "Award-winning digital marketing agency since 2008. Featured in Forbes, Search Engine Journal, and Wired.",
+  "Independent research-backed guide. All recommendations tested on real client sites with documented case studies.",
+  "Author: Dr. Sarah Chen, PhD in Information Retrieval. Peer-reviewed methodology, updated quarterly.",
+  "Trusted by 50,000+ SEO professionals. Member of SEMPO, regularly cited in academic SEO research.",
+  "No-fluff guide from practitioners. Real data from 200+ audited sites included. Last reviewed this month.",
+  "Written by the team behind multiple top-10 ranking e-commerce sites. Transparent methodology disclosed.",
+  "Endorsed by leading SEO tools. Our accuracy rating: 94% based on 1,200 user case study submissions.",
+  "Comprehensive resource maintained by a team of 8 SEO specialists. All claims backed by Google documentation.",
+];
 
 function getMockCompetitors(url: string): SerpResult[] {
   const domain = new URL(url).hostname;
@@ -44,6 +66,7 @@ function getMockCompetitors(url: string): SerpResult[] {
     position: i + 1,
     title: `Best ${domain} Guide ${i + 1} — Complete Overview`,
     url: `https://competitor${i + 1}.com/guide`,
+    snippet: MOCK_SNIPPETS[i] ?? "",
   }));
 }
 
@@ -90,6 +113,7 @@ export async function fetchCompetitors(url: string): Promise<SerpResult[]> {
       position: index + 1,
       title: item.title ?? "",
       url: item.url ?? "",
+      snippet: item.description ?? "",
     }));
 }
 
@@ -126,4 +150,89 @@ export async function fetchKeywords(keywords: string[]): Promise<KeywordData[]> 
     cpc: item.cpc ?? 0,
     competition: item.competition ?? 0,
   }));
+}
+
+// ─────────────────────────────────────────
+// DOMAIN INFO: возраст домена + бэклинки
+// ─────────────────────────────────────────
+
+function formatDomainAge(registeredAt: string | null): string | null {
+  if (!registeredAt) return null;
+  const created = new Date(registeredAt);
+  if (isNaN(created.getTime())) return null;
+  const now = new Date();
+  const years = now.getFullYear() - created.getFullYear();
+  const months = now.getMonth() - created.getMonth() + years * 12;
+  const y = Math.floor(months / 12);
+  const m = months % 12;
+  if (y === 0) return `${m} мес.`;
+  if (m === 0) return `${y} ${y === 1 ? "год" : y < 5 ? "года" : "лет"}`;
+  return `${y} ${y === 1 ? "год" : y < 5 ? "года" : "лет"} ${m} мес.`;
+}
+
+function getMockDomainInfo(domains: string[]): DomainInfo[] {
+  return domains.map((domain, i) => {
+    const yearsAgo = 2 + (i % 8);
+    const registered = new Date();
+    registered.setFullYear(registered.getFullYear() - yearsAgo);
+    const registeredAt = registered.toISOString();
+    return {
+      domain,
+      domainAge: formatDomainAge(registeredAt),
+      registeredAt,
+      backlinks: Math.floor(Math.random() * 50_000) + 1_000,
+      referringDomains: Math.floor(Math.random() * 2_000) + 50,
+    };
+  });
+}
+
+export async function fetchDomainInfo(domains: string[]): Promise<DomainInfo[]> {
+  if (domains.length === 0) return [];
+  if (USE_MOCK) return getMockDomainInfo(domains);
+
+  // Параллельно: WHOIS (возраст) + Backlinks (ссылки)
+  const [whoisRes, backlinksRes] = await Promise.all([
+    fetch(`${BASE_URL}/domain_analytics/whois/overview/live`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(domains.map((d) => ({ domain: d }))),
+    }),
+    fetch(`${BASE_URL}/backlinks/summary/live`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(domains.map((d) => ({ target: d, target_type: "domain" }))),
+    }),
+  ]);
+
+  const whoisData = whoisRes.ok ? await whoisRes.json() : null;
+  const backlinksData = backlinksRes.ok ? await backlinksRes.json() : null;
+
+  const whoisMap: Record<string, string | null> = {};
+  for (const task of whoisData?.tasks ?? []) {
+    for (const item of task?.result ?? []) {
+      whoisMap[item.domain] = item.created_date ?? null;
+    }
+  }
+
+  const backlinksMap: Record<string, { backlinks: number; referringDomains: number }> = {};
+  for (const task of backlinksData?.tasks ?? []) {
+    for (const item of task?.result ?? []) {
+      backlinksMap[item.target] = {
+        backlinks: item.backlinks ?? 0,
+        referringDomains: item.referring_domains ?? 0,
+      };
+    }
+  }
+
+  return domains.map((domain) => {
+    const registeredAt = whoisMap[domain] ?? null;
+    const bl = backlinksMap[domain] ?? { backlinks: 0, referringDomains: 0 };
+    return {
+      domain,
+      domainAge: formatDomainAge(registeredAt),
+      registeredAt,
+      backlinks: bl.backlinks,
+      referringDomains: bl.referringDomains,
+    };
+  });
 }

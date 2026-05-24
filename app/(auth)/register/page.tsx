@@ -9,7 +9,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Zap, Globe } from "lucide-react";
+import { Zap, Globe, AlertCircle, Check, X } from "lucide-react";
+
+function PasswordRule({ met, label }: { met: boolean; label: string }) {
+  return (
+    <li className={`flex items-center gap-1.5 text-xs ${met ? "text-green-600" : "text-muted-foreground"}`}>
+      {met ? <Check className="h-3 w-3 shrink-0" /> : <X className="h-3 w-3 shrink-0" />}
+      {label}
+    </li>
+  );
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -19,8 +28,16 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const passwordChecks = {
+    length: password.length >= 8,
+    letter: /[a-zA-Zа-яА-ЯёЁ]/.test(password),
+    digit: /\d/.test(password),
+  };
+  const passwordValid = Object.values(passwordChecks).every(Boolean);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!passwordValid) return;
     setLoading(true);
     setError("");
 
@@ -88,7 +105,8 @@ export default function RegisterPage() {
                   id="name"
                   placeholder="Иван Иванов"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => { setName(e.target.value); setError(""); }}
+                  className={error ? "border-destructive focus-visible:ring-destructive" : ""}
                   required
                 />
               </div>
@@ -99,7 +117,8 @@ export default function RegisterPage() {
                   type="email"
                   placeholder="you@example.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => { setEmail(e.target.value); setError(""); }}
+                  className={error ? "border-destructive focus-visible:ring-destructive" : ""}
                   required
                 />
               </div>
@@ -108,18 +127,33 @@ export default function RegisterPage() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Минимум 6 символов"
+                  placeholder="Минимум 8 символов"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                  className={
+                    password.length > 0 && !passwordValid
+                      ? "border-destructive focus-visible:ring-destructive"
+                      : ""
+                  }
                   required
                 />
+                {password.length > 0 && (
+                  <ul className="mt-1.5 space-y-1">
+                    <PasswordRule met={passwordChecks.length}  label="Минимум 8 символов" />
+                    <PasswordRule met={passwordChecks.letter}  label="Хотя бы одна буква" />
+                    <PasswordRule met={passwordChecks.digit}   label="Хотя бы одна цифра" />
+                  </ul>
+                )}
               </div>
 
               {error && (
-                <p className="text-sm text-destructive">{error}</p>
+                <div className="flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {error}
+                </div>
               )}
 
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full" disabled={loading || !passwordValid}>
                 {loading ? "Создаём аккаунт..." : "Зарегистрироваться"}
               </Button>
             </form>

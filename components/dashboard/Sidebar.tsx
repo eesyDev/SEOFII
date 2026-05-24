@@ -14,17 +14,23 @@ const navItems = [
   { href: "/settings", icon: Settings, label: "Настройки" },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  reportsUsed: number;
+  reportsLimit: number;
+  plan: string;
+}
+
+export default function Sidebar({ reportsUsed, reportsLimit, plan }: SidebarProps) {
   const pathname = usePathname();
 
   return (
     <aside className="hidden md:flex flex-col w-60 border-r bg-background min-h-screen">
       {/* Лого */}
-      <div className="flex items-center gap-2 px-6 py-5 border-b">
+      <Link href="/dashboard" className="flex items-center gap-2 px-6 py-5 border-b hover:opacity-80 transition-opacity">
         <Zap className="h-5 w-5 text-primary" />
         <span className="font-bold text-lg">SEOBrief</span>
         <Badge variant="secondary" className="text-xs ml-auto">Beta</Badge>
-      </div>
+      </Link>
 
       {/* Навигация */}
       <nav className="flex-1 px-3 py-4 space-y-1">
@@ -48,17 +54,28 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Апгрейд план */}
+      {/* Использование / апгрейд */}
       <div className="px-3 py-4 border-t">
         <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-          <p className="font-medium text-foreground mb-1">Free план</p>
-          <p>0 / 3 отчётов использовано</p>
-          <Link
-            href="/billing"
-            className="mt-2 block text-primary font-medium hover:underline"
-          >
-            Перейти на Pro →
-          </Link>
+          <div className="flex items-center justify-between mb-1">
+            <p className="font-medium text-foreground capitalize">{plan.toLowerCase()} план</p>
+            <span className="tabular-nums">{reportsUsed} / {reportsLimit}</span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-background overflow-hidden mb-2">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                reportsUsed >= reportsLimit ? "bg-destructive" : "bg-primary"
+              )}
+              style={{ width: `${Math.min((reportsUsed / reportsLimit) * 100, 100)}%` }}
+            />
+          </div>
+          <p className="mb-2">отчётов использовано</p>
+          {plan === "FREE" && (
+            <Link href="/billing" className="block text-primary font-medium hover:underline">
+              Перейти на Pro →
+            </Link>
+          )}
         </div>
       </div>
     </aside>
