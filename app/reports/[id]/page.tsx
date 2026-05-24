@@ -23,6 +23,7 @@ import { KeywordTable } from "@/components/report/keyword-table";
 import { CompetitorComparisonSection } from "@/components/report/competitor-comparison";
 import { QuickFixesSection } from "@/components/report/quick-fixes";
 import { BlockMatrixSection } from "@/components/report/block-matrix";
+import { SpeedCard } from "@/components/report/speed-card";
 
 // ─────────────────────────────────────────
 // ТИПЫ
@@ -67,7 +68,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
     }),
     prisma.user.findUnique({
       where: { id: userId },
-      select: { plan: true },
+      select: { plan: true, isAdmin: true },
     }),
   ]);
 
@@ -90,7 +91,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const pageSpeed   = result?.pageSpeed ?? {};
   const gscRows     = (report.gscData as GscRow[] | null) ?? [];
   const hasGsc      = gscRows.length > 0;
-  const isFree      = !user || user.plan === "FREE";
+  const isFree      = !user?.isAdmin && (!user || user.plan === "FREE");
   const domainInfo  = result?.domainInfo ?? {};
 
   return (
@@ -174,6 +175,16 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
             {/* ── ТАБ 2: КОНКУРЕНТЫ ── */}
             <TabsContent value="competitors" className="space-y-4">
+              {pageSpeed[report.url] && (
+                <SpeedCard
+                  targetUrl={report.url}
+                  targetSpeed={pageSpeed[report.url]}
+                  competitorSpeeds={report.competitors
+                    .filter((c) => pageSpeed[c.url]?.score != null)
+                    .slice(0, 3)
+                    .map((c) => ({ domain: c.domain, data: pageSpeed[c.url] }))}
+                />
+              )}
               {comparisons.length > 0
                 ? <CompetitorComparisonSection comparisons={comparisons} isPro={!isFree} />
                 : <EmptyTab text="Создайте новый отчёт чтобы увидеть сравнение с конкурентами" />

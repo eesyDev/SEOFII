@@ -23,6 +23,7 @@ model User {
   image         String?   // аватар из Google OAuth
   password      String?   // null для OAuth-пользователей
   plan          Plan      @default(FREE)
+  isAdmin       Boolean   @default(false)
   reportsUsed   Int       @default(0)
   reportsLimit  Int       @default(3)
   createdAt     DateTime  @default(now())

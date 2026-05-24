@@ -4,8 +4,32 @@ import { generateSEOBrief, generateComparisons, generateBlockMatrix, generateQui
 import { computeAnalytics } from "@/lib/analytics";
 import { scrapePages } from "@/lib/scraper";
 import { fetchPageSpeeds } from "@/lib/pagespeed";
+import type { PageSpeedData } from "@/lib/pagespeed";
 import type { GscRow } from "@/lib/gsc";
 import type { Prisma } from "@prisma/client";
+
+// PageSpeed не блокирует отчёт — если не успел за 20s, возвращаем пустые данные
+async function fetchPageSpeedsWithTimeout(
+  targetUrl: string,
+  competitorUrls: string[]
+): Promise<{ target: PageSpeedData; competitors: PageSpeedData[] }> {
+  const empty: PageSpeedData = { score: null, lcp: null, cls: null, tbt: null, fcp: null, fetchError: "timeout" };
+  const emptyResult = {
+    target: empty,
+    competitors: competitorUrls.map(() => empty),
+  };
+
+  try {
+    return await Promise.race([
+      fetchPageSpeeds(targetUrl, competitorUrls),
+      new Promise<typeof emptyResult>((resolve) =>
+        setTimeout(() => resolve(emptyResult), 20_000)
+      ),
+    ]);
+  } catch {
+    return emptyResult;
+  }
+}
 
 export async function processReport(reportId: string) {
   const report = await prisma.report.findUnique({ where: { id: reportId } });
@@ -19,12 +43,11 @@ export async function processReport(reportId: string) {
   });
 
   try {
-    // Читаем план пользователя для гейтинга сравнений
     const user = await prisma.user.findUnique({
       where: { id: report.userId },
-      select: { plan: true },
+      select: { plan: true, isAdmin: true },
     });
-    const isPro = user?.plan === "STARTER" || user?.plan === "PRO";
+    const isPro = user?.isAdmin || user?.plan === "STARTER" || user?.plan === "PRO";
 
     const competitors = await fetchCompetitors(report.url, report.locationCode);
 
@@ -38,6 +61,8 @@ export async function processReport(reportId: string) {
       })),
     });
 
+    const compareCount = isPro ? 3 : 1;
+    const topCompetitors = competitors.slice(0, compareCount);
     const competitorDomains = [...new Set(competitors.map((c) => c.domain))];
 
     const fromTitles = competitors
@@ -46,9 +71,15 @@ export async function processReport(reportId: string) {
     const fromGsc = gscRows.map((r) => r.query);
     const rawKeywords = [...new Set([...fromTitles, ...fromGsc])].slice(0, 30);
 
-    const [keywordData, domainInfo] = await Promise.all([
-      fetchKeywords(rawKeywords),
-      fetchDomainInfo(competitorDomains),
+    // Всё параллельно: keywords, domains, scraping, pagespeed
+    const [
+      [keywordData, domainInfo],
+      { target: targetSnapshot, competitors: compSnapshots },
+      { target: targetSpeed, competitors: compSpeeds },
+    ] = await Promise.all([
+      Promise.all([fetchKeywords(rawKeywords), fetchDomainInfo(competitorDomains)]),
+      scrapePages(report.url, topCompetitors.map((c) => c.url)),
+      fetchPageSpeedsWithTimeout(report.url, topCompetitors.map((c) => c.url)),
     ]);
 
     if (keywordData.length > 0) {
@@ -65,42 +96,28 @@ export async function processReport(reportId: string) {
 
     const analytics = computeAnalytics(competitors, keywordData, domainInfo, gscRows);
 
-    // Топ-1 для Free, топ-3 для Pro
-    const compareCount = isPro ? 3 : 1;
-    const topCompetitors = competitors.slice(0, compareCount);
-
-    // Параллельно: бриф + скрапинг + pagespeed
+    // Бриф параллельно с comparisons+blockMatrix — brief не зависит от snapshots
     const [
       { brief, costUsd: briefCost },
-      { target: targetSnapshot, competitors: compSnapshots },
-      { target: targetSpeed, competitors: compSpeeds },
+      [comparisons, blockMatrix],
     ] = await Promise.all([
       generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows),
-      scrapePages(report.url, topCompetitors.map((c) => c.url)),
-      fetchPageSpeeds(report.url, topCompetitors.map((c) => c.url)),
+      Promise.all([
+        generateComparisons(targetSnapshot, compSnapshots, topCompetitors),
+        generateBlockMatrix(targetSnapshot, compSnapshots, topCompetitors),
+      ]),
     ]);
 
     brief.domainInfo = Object.fromEntries(
-      domainInfo.map((d) => [
-        d.domain,
-        { domainAge: d.domainAge, referringDomains: d.referringDomains },
-      ])
+      domainInfo.map((d) => [d.domain, { domainAge: d.domainAge, referringDomains: d.referringDomains }])
     );
 
-    // Сравнение + матрица блоков параллельно, потом quick fixes
-    const [comparisons, blockMatrix] = await Promise.all([
-      generateComparisons(targetSnapshot, compSnapshots, topCompetitors),
-      generateBlockMatrix(targetSnapshot, compSnapshots, topCompetitors),
-    ]);
     const quickFixes = await generateQuickFixes(report.url, brief, comparisons, analytics);
 
-    // Считаем стоимость сравнений приблизительно ($3/1M in, $15/1M out)
     const compCost = comparisons.length * 0.015;
-    const fixesCost = 0.01;
-    const costUsd = briefCost + compCost + fixesCost;
+    const costUsd = briefCost + compCost + 0.01;
 
-    // Собираем pagespeed по URL для удобного доступа в UI
-    const pageSpeed: Record<string, typeof targetSpeed> = {
+    const pageSpeed: Record<string, PageSpeedData> = {
       [report.url]: targetSpeed,
       ...Object.fromEntries(topCompetitors.map((c, i) => [c.url, compSpeeds[i]])),
     };
@@ -118,11 +135,7 @@ export async function processReport(reportId: string) {
 
     await prisma.report.update({
       where: { id: reportId },
-      data: {
-        status: "DONE",
-        result: result as unknown as Prisma.InputJsonValue,
-        costUsd,
-      },
+      data: { status: "DONE", result: result as unknown as Prisma.InputJsonValue, costUsd },
     });
 
     await prisma.user.update({
