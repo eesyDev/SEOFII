@@ -3,6 +3,7 @@ import { fetchCompetitors, fetchKeywords, fetchDomainInfo } from "@/lib/datafors
 import { generateSEOBrief, generateComparisons, generateBlockMatrix, generateQuickFixes } from "@/lib/claude";
 import { computeAnalytics } from "@/lib/analytics";
 import { scrapePages } from "@/lib/scraper";
+import { fetchPageSpeeds } from "@/lib/pagespeed";
 import type { GscRow } from "@/lib/gsc";
 import type { Prisma } from "@prisma/client";
 
@@ -25,7 +26,7 @@ export async function processReport(reportId: string) {
     });
     const isPro = user?.plan === "STARTER" || user?.plan === "PRO";
 
-    const competitors = await fetchCompetitors(report.url);
+    const competitors = await fetchCompetitors(report.url, report.locationCode);
 
     await prisma.competitor.createMany({
       data: competitors.map((c) => ({
@@ -68,12 +69,16 @@ export async function processReport(reportId: string) {
     const compareCount = isPro ? 3 : 1;
     const topCompetitors = competitors.slice(0, compareCount);
 
-    // Параллельно: бриф + скрапинг страниц
-    const [{ brief, costUsd: briefCost }, { target: targetSnapshot, competitors: compSnapshots }] =
-      await Promise.all([
-        generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows),
-        scrapePages(report.url, topCompetitors.map((c) => c.url)),
-      ]);
+    // Параллельно: бриф + скрапинг + pagespeed
+    const [
+      { brief, costUsd: briefCost },
+      { target: targetSnapshot, competitors: compSnapshots },
+      { target: targetSpeed, competitors: compSpeeds },
+    ] = await Promise.all([
+      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows),
+      scrapePages(report.url, topCompetitors.map((c) => c.url)),
+      fetchPageSpeeds(report.url, topCompetitors.map((c) => c.url)),
+    ]);
 
     brief.domainInfo = Object.fromEntries(
       domainInfo.map((d) => [
@@ -94,6 +99,12 @@ export async function processReport(reportId: string) {
     const fixesCost = 0.01;
     const costUsd = briefCost + compCost + fixesCost;
 
+    // Собираем pagespeed по URL для удобного доступа в UI
+    const pageSpeed: Record<string, typeof targetSpeed> = {
+      [report.url]: targetSpeed,
+      ...Object.fromEntries(topCompetitors.map((c, i) => [c.url, compSpeeds[i]])),
+    };
+
     const result = {
       brief,
       analytics,
@@ -101,6 +112,7 @@ export async function processReport(reportId: string) {
       blockMatrix,
       quickFixes,
       competitors,
+      pageSpeed,
       domainInfo: Object.fromEntries(domainInfo.map((d) => [d.domain, d])),
     };
 

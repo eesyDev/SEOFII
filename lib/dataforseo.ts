@@ -43,6 +43,28 @@ export interface DomainInfo {
 }
 
 // ─────────────────────────────────────────
+// LOCALES
+// ─────────────────────────────────────────
+
+export const LOCATIONS: Record<string, { code: number; label: string }> = {
+  RU: { code: 2643, label: "Россия" },
+  US: { code: 2840, label: "США" },
+  UK: { code: 2826, label: "Великобритания" },
+  DE: { code: 2276, label: "Германия" },
+  FR: { code: 2250, label: "Франция" },
+  KZ: { code: 2398, label: "Казахстан" },
+  UA: { code: 2804, label: "Украина" },
+  BY: { code: 2112, label: "Беларусь" },
+};
+
+const LOCATION_LANGUAGE: Record<number, string> = {
+  2643: "ru", 2398: "ru", 2804: "ru", 2112: "ru",
+  2840: "en", 2826: "en",
+  2276: "de",
+  2250: "fr",
+};
+
+// ─────────────────────────────────────────
 // SERP: топ-10 конкурентов по URL
 // ─────────────────────────────────────────
 
@@ -79,11 +101,14 @@ function getMockKeywords(keywords: string[]): KeywordData[] {
   }));
 }
 
-export async function fetchCompetitors(url: string): Promise<SerpResult[]> {
+export async function fetchCompetitors(url: string, locationCode = 2840): Promise<SerpResult[]> {
   if (USE_MOCK) return getMockCompetitors(url);
 
   const targetUrl = new URL(url);
   const searchQuery = targetUrl.hostname + " " + targetUrl.pathname.replace(/\//g, " ").trim();
+
+  // Язык определяем по локации
+  const languageCode = LOCATION_LANGUAGE[locationCode] ?? "en";
 
   const response = await fetch(`${BASE_URL}/serp/google/organic/live/advanced`, {
     method: "POST",
@@ -91,8 +116,8 @@ export async function fetchCompetitors(url: string): Promise<SerpResult[]> {
     body: JSON.stringify([
       {
         keyword: searchQuery,
-        location_code: 2840, // США по умолчанию, потом сделать настраиваемым
-        language_code: "en",
+        location_code: locationCode,
+        language_code: languageCode,
         depth: 10,
       },
     ]),

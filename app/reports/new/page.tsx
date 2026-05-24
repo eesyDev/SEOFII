@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Search, Loader2, AlertCircle, Upload, CheckCircle2, X, Info } from "lucide-react";
 import { parseGscCsvDetailed, type GscRow } from "@/lib/gsc";
+import { LOCATIONS } from "@/lib/dataforseo";
 
 export default function NewReportPage() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export default function NewReportPage() {
   const [gscFileName, setGscFileName] = useState("");
   const [gscError, setGscError] = useState("");
   const [showNoGscWarning, setShowNoGscWarning] = useState(false);
+  const [locationCode, setLocationCode] = useState(2643); // RU по умолчанию
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -61,7 +63,7 @@ export default function NewReportPage() {
     const res = await fetch("/api/reports", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, gscData: gscRows ?? null }),
+      body: JSON.stringify({ url, gscData: gscRows ?? null, locationCode }),
     });
 
     const data = await res.json();
@@ -117,6 +119,22 @@ export default function NewReportPage() {
                 required
                 disabled={loading}
               />
+            </div>
+
+            {/* Location */}
+            <div className="space-y-1.5">
+              <Label htmlFor="location">Регион поиска</Label>
+              <select
+                id="location"
+                value={locationCode}
+                onChange={(e) => setLocationCode(Number(e.target.value))}
+                disabled={loading}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {Object.entries(LOCATIONS).map(([key, { code, label }]) => (
+                  <option key={key} value={code}>{label}</option>
+                ))}
+              </select>
             </div>
 
             {/* GSC Upload */}

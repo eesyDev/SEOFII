@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
   const url: string = body?.url;
   const projectId: string | undefined = body?.projectId;
   const gscData = body?.gscData ?? null;
+  const locationCode: number = body?.locationCode ?? 2840;
 
   if (!url) return NextResponse.json({ error: "URL обязателен" }, { status: 400 });
 
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
       projectId: projectId || null,
       status: "PENDING",
       gscData,
+      locationCode,
     },
   });
 
