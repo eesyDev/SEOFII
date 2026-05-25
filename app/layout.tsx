@@ -10,8 +10,9 @@ const geistSans = Geist({ subsets: ["latin"], variable: "--font-sans" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "SEO Brief Generator",
-  description: "Введи URL страницы — получи готовое ТЗ для копирайтера за минуту.",
+  title: { default: "SEOBrief", template: "%s — SEOBrief" },
+  description:
+    "SEO-анализ конкурентов, gap-ключи и готовый контент для сайта за минуту. Powered by Claude AI.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

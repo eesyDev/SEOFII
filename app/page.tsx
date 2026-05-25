@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Search, BarChart2, FileText, Check, Zap, ArrowRight, Sparkles, TrendingUp, Clock } from "lucide-react";
 import HeroVisual from "@/components/landing/HeroVisual";
+
+export const metadata: Metadata = {
+  title: "SEOBrief — SEO-анализ и готовый контент за минуту",
+  description:
+    "Вставь URL — получи разбор конкурентов, gap-анализ и готовые тексты (title, H1, meta, FAQ) которые можно сразу скопировать на сайт. Первый отчёт бесплатно.",
+};
 
 const features = [
   {
@@ -68,9 +75,62 @@ const stats = [
   { icon: Clock,      value: "5 задач",   label: "что делать прямо сейчас" },
 ];
 
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "SEOBrief",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://seobrief.ru",
+      "description":
+        "SEO-анализ конкурентов, gap-анализ ключевых слов и генерация готового контента (title, H1, meta description, FAQ) на основе Claude AI.",
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "Free",
+          "price": "0",
+          "priceCurrency": "USD",
+          "description": "1 отчёт бесплатно",
+        },
+        {
+          "@type": "Offer",
+          "name": "Starter",
+          "price": "25",
+          "priceCurrency": "USD",
+          "description": "4 отчёта в месяц",
+        },
+        {
+          "@type": "Offer",
+          "name": "Pro",
+          "price": "50",
+          "priceCurrency": "USD",
+          "description": "10 отчётов в месяц",
+        },
+      ],
+    },
+    {
+      "@type": "Organization",
+      "name": "SEOBrief",
+      "url": "https://seobrief.ru",
+      "logo": "https://seobrief.ru/opengraph-image",
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "customer support",
+        "email": "support@seobrief.ru",
+      },
+    },
+  ],
+};
+
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-[#060a0f] text-white overflow-x-hidden">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
 
       {/* ── НАВИГАЦИЯ ── */}
       <header className="fixed top-0 inset-x-0 z-50 border-b border-white/[0.06] bg-[#060a0f]/80 backdrop-blur-xl">
