@@ -8,7 +8,7 @@ import { Search, BarChart2, FileText, Check, Zap } from "lucide-react";
 const features = [
   {
     icon: Search,
-    title: "Топ-10 конкурентов",
+    title: "Анализ конкурентов",
     description: "Автоматически анализируем выдачу по твоему URL через DataForSEO",
   },
   {
@@ -83,7 +83,7 @@ export default function HomePage() {
           <span className="text-muted-foreground">за одну минуту</span>
         </h1>
         <p className="text-xl text-muted-foreground mb-10 max-w-xl mx-auto leading-relaxed">
-          Вставь URL страницы — получи анализ топ-10 конкурентов, ключевые слова
+          Вставь URL страницы — получи анализ конкурентов из выдачи, ключевые слова
           и детальное техническое задание на оптимизацию.
         </p>
         <div className="flex items-center justify-center gap-3">

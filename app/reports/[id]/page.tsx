@@ -16,6 +16,7 @@ import type { AnalyticsResult } from "@/lib/analytics";
 import type { SerpResult, DomainInfo } from "@/lib/dataforseo";
 import type { PageSpeedData } from "@/lib/pagespeed";
 import type { GscRow } from "@/lib/gsc";
+import type { SiteType } from "@/lib/scraper";
 import { ReportPoller } from "@/components/report-poller";
 import { SummaryCards } from "@/components/report/summary-cards";
 import { VolumeChart, GscPositionsChart } from "@/components/report/report-charts";
@@ -24,6 +25,7 @@ import { CompetitorComparisonSection } from "@/components/report/competitor-comp
 import { QuickFixesSection } from "@/components/report/quick-fixes";
 import { BlockMatrixSection } from "@/components/report/block-matrix";
 import { SpeedCard } from "@/components/report/speed-card";
+import { ReadyContentSection, ReadyContentLocked } from "@/components/report/ready-content";
 
 // ─────────────────────────────────────────
 // ТИПЫ
@@ -38,6 +40,8 @@ interface ReportResult {
   blockMatrix?: BlockRow[];
   quickFixes?: QuickFix[];
   pageSpeed?: Record<string, PageSpeedData>;
+  siteType?: SiteType;
+  readyContent?: import("@/lib/claude").ReadyContent | null;
 }
 
 const STATUS_CONFIG = {
@@ -85,10 +89,12 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
   const brief       = result?.brief ?? null;
   const analytics   = result?.analytics ?? null;
-  const comparisons = result?.comparisons ?? [];
-  const blockMatrix = result?.blockMatrix ?? [];
-  const quickFixes  = result?.quickFixes ?? [];
-  const pageSpeed   = result?.pageSpeed ?? {};
+  const comparisons  = result?.comparisons ?? [];
+  const blockMatrix  = result?.blockMatrix ?? [];
+  const quickFixes   = result?.quickFixes ?? [];
+  const pageSpeed    = result?.pageSpeed ?? {};
+  const siteType     = result?.siteType ?? null;
+  const readyContent = result?.readyContent ?? null;
   const gscRows     = (report.gscData as GscRow[] | null) ?? [];
   const hasGsc      = gscRows.length > 0;
   const isFree      = !user?.isAdmin && (!user || user.plan === "FREE");
@@ -111,12 +117,15 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
               {config.label}
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {report.project?.name && `${report.project.name} · `}
-            {new Date(report.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
-            {report.costUsd && ` · $${Number(report.costUsd).toFixed(4)}`}
-            {hasGsc && <span className="ml-1">· GSC ✓</span>}
-          </p>
+          <div className="flex items-center gap-2 flex-wrap mt-0.5">
+            <p className="text-xs text-muted-foreground">
+              {report.project?.name && `${report.project.name} · `}
+              {new Date(report.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
+              {report.costUsd && ` · $${Number(report.costUsd).toFixed(4)}`}
+              {hasGsc && <span className="ml-1">· GSC ✓</span>}
+            </p>
+            {siteType && <SiteTypeBadge siteType={siteType} />}
+          </div>
         </div>
       </div>
 
@@ -161,6 +170,10 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
             {/* ── ТАБ 1: ЧТО ДЕЛАТЬ ── */}
             <TabsContent value="actions" className="space-y-4">
+              {readyContent
+                ? <ReadyContentSection readyContent={readyContent} />
+                : <ReadyContentLocked />
+              }
               {quickFixes.length > 0
                 ? <QuickFixesSection quickFixes={quickFixes} />
                 : <EmptyTab text="Создайте новый отчёт чтобы увидеть список задач" />
@@ -194,7 +207,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
               {report.competitors.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Топ-10 конкурентов</CardTitle>
+                    <CardTitle className="text-base">Конкуренты из выдачи ({report.competitors.length})</CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
@@ -481,6 +494,22 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 // ─────────────────────────────────────────
 // ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ
 // ─────────────────────────────────────────
+
+const SITE_TYPE_CONFIG: Record<string, { label: string; className: string }> = {
+  ecommerce: { label: "Интернет-магазин", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" },
+  content:   { label: "Информационный",   className: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400" },
+  local:     { label: "Локальный бизнес", className: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400" },
+};
+
+function SiteTypeBadge({ siteType }: { siteType: SiteType }) {
+  const cfg = SITE_TYPE_CONFIG[siteType];
+  if (!cfg) return null;
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cfg.className}`}>
+      {cfg.label}
+    </span>
+  );
+}
 
 function EmptyTab({ text }: { text: string }) {
   return (

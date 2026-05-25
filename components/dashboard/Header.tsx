@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LogOut, Settings, User, Sun, Moon } from "lucide-react";
 import Link from "next/link";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/components/providers/ThemeProvider";
 
 interface HeaderProps {
   user: {

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { fetchCompetitors, fetchKeywords, fetchDomainInfo } from "@/lib/dataforseo";
-import { generateSEOBrief, generateComparisons, generateBlockMatrix, generateQuickFixes } from "@/lib/claude";
+import { generateSEOBrief, generateComparisons, generateBlockMatrix, generateQuickFixes, generateReadyContent } from "@/lib/claude";
 import { computeAnalytics } from "@/lib/analytics";
 import { scrapePages } from "@/lib/scraper";
 import { fetchPageSpeeds } from "@/lib/pagespeed";
@@ -96,15 +96,17 @@ export async function processReport(reportId: string) {
 
     const analytics = computeAnalytics(competitors, keywordData, domainInfo, gscRows);
 
+    const siteType = targetSnapshot.siteType;
+
     // Бриф параллельно с comparisons+blockMatrix — brief не зависит от snapshots
     const [
       { brief, costUsd: briefCost },
       [comparisons, blockMatrix],
     ] = await Promise.all([
-      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows),
+      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType),
       Promise.all([
         generateComparisons(targetSnapshot, compSnapshots, topCompetitors),
-        generateBlockMatrix(targetSnapshot, compSnapshots, topCompetitors),
+        generateBlockMatrix(targetSnapshot, compSnapshots, topCompetitors, siteType),
       ]),
     ]);
 
@@ -112,7 +114,10 @@ export async function processReport(reportId: string) {
       domainInfo.map((d) => [d.domain, { domainAge: d.domainAge, referringDomains: d.referringDomains }])
     );
 
-    const quickFixes = await generateQuickFixes(report.url, brief, comparisons, analytics);
+    const quickFixes = await generateQuickFixes(report.url, brief, comparisons, analytics, siteType);
+    const readyContent = isPro
+      ? await generateReadyContent(report.url, brief, siteType)
+      : null;
 
     const compCost = comparisons.length * 0.015;
     const costUsd = briefCost + compCost + 0.01;
@@ -128,8 +133,10 @@ export async function processReport(reportId: string) {
       comparisons,
       blockMatrix,
       quickFixes,
+      readyContent,
       competitors,
       pageSpeed,
+      siteType,
       domainInfo: Object.fromEntries(domainInfo.map((d) => [d.domain, d])),
     };
 

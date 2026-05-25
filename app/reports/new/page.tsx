@@ -95,7 +95,7 @@ export default function NewReportPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Новый отчёт</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Введи URL страницы — мы проанализируем топ-10 конкурентов и сгенерируем ТЗ
+          Введи URL страницы — мы проанализируем конкурентов из выдачи и сгенерируем ТЗ
         </p>
       </div>
 
@@ -248,7 +248,7 @@ export default function NewReportPage() {
             <div className="mt-4 space-y-2 text-sm text-muted-foreground">
               <p className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                Получаем топ-10 конкурентов из DataForSEO...
+                Получаем конкурентов из выдачи (DataForSEO)...
               </p>
               <p className="flex items-center gap-2 opacity-60">
                 <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />

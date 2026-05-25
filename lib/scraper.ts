@@ -5,6 +5,8 @@ const USE_MOCK = !process.env.ANTHROPIC_API_KEY;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
+export type SiteType = "ecommerce" | "content" | "local";
+
 export interface PageSnapshot {
   url: string;
   title: string;
@@ -18,6 +20,7 @@ export interface PageSnapshot {
   imagesCount: number;
   imagesWithAlt: number;
   detectedBlocks: string[];  // эвристика: ["reviews", "faq", "video", ...]
+  siteType: SiteType;
   fetchError?: string;
 }
 
@@ -96,6 +99,34 @@ function detectBlocks($: CheerioRoot, schemaTypes: string[], bodyText: string): 
   return [...new Set(blocks)];
 }
 
+function detectSiteType(
+  $: CheerioRoot,
+  schemaTypes: string[],
+  bodyText: string,
+  detectedBlocks: string[]
+): SiteType {
+  const ecommScore = [
+    schemaTypes.some((t) => ["Product", "Offer", "ItemList", "ProductGroup"].includes(t)),
+    /добавить в корзину|купить сейчас|в корзину|buy now|add to cart/i.test(bodyText),
+    $("[class*='cart'], [class*='basket'], [class*='корзин'], [id*='cart']").length > 0,
+    detectedBlocks.includes("price") && (detectedBlocks.includes("gallery") || detectedBlocks.includes("reviews")),
+    $("[class*='product'], [itemtype*='Product']").length > 2,
+  ].filter(Boolean).length;
+
+  const localScore = [
+    schemaTypes.some((t) =>
+      ["LocalBusiness", "Restaurant", "Store", "MedicalBusiness", "AutoDealer", "Hotel"].includes(t)
+    ),
+    detectedBlocks.includes("map"),
+    /режим работы|часы работы|пн[–-]пт|мы находимся|наш адрес/i.test(bodyText),
+    $("address").length > 0,
+  ].filter(Boolean).length;
+
+  if (ecommScore >= 2) return "ecommerce";
+  if (localScore >= 2) return "local";
+  return "content";
+}
+
 async function scrapePage(url: string): Promise<PageSnapshot> {
   const base: PageSnapshot = {
     url,
@@ -110,6 +141,7 @@ async function scrapePage(url: string): Promise<PageSnapshot> {
     imagesCount: 0,
     imagesWithAlt: 0,
     detectedBlocks: [],
+    siteType: "content",
   };
 
   try {
@@ -167,7 +199,9 @@ async function scrapePage(url: string): Promise<PageSnapshot> {
       if (headings.length < 15) headings.push($(el).text().trim());
     });
 
-    const detectedBlocks = detectBlocks($, schemaTypes, bodyText);
+    const uniqueSchemaTypes = [...new Set(schemaTypes)];
+    const detectedBlocks = detectBlocks($, uniqueSchemaTypes, bodyText);
+    const siteType = detectSiteType($, uniqueSchemaTypes, bodyText, detectedBlocks);
 
     return {
       url,
@@ -176,12 +210,13 @@ async function scrapePage(url: string): Promise<PageSnapshot> {
       h1: $("h1").first().text().trim(),
       wordCount,
       headings,
-      hasSchema: schemaTypes.length > 0,
-      schemaTypes: [...new Set(schemaTypes)],
+      hasSchema: uniqueSchemaTypes.length > 0,
+      schemaTypes: uniqueSchemaTypes,
       internalLinksCount,
       imagesCount: images.length,
       imagesWithAlt,
       detectedBlocks,
+      siteType,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Неизвестная ошибка";
@@ -204,6 +239,7 @@ function getMockSnapshot(url: string, isTarget = false): PageSnapshot {
       imagesCount: 8,
       imagesWithAlt: 3,
       detectedBlocks: ["price", "form"],
+      siteType: "ecommerce",
     };
   }
   const pos = parseInt(new URL(url).hostname.replace("competitor", "")) || 1;
@@ -230,6 +266,7 @@ function getMockSnapshot(url: string, isTarget = false): PageSnapshot {
     imagesCount: 20 + pos * 5,
     imagesWithAlt: 18 + pos * 4,
     detectedBlocks: competitorBlocks,
+    siteType: "ecommerce",
   };
 }
 
