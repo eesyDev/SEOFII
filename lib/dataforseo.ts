@@ -239,7 +239,9 @@ export async function fetchDomainInfo(domains: string[]): Promise<DomainInfo[]> 
   const whoisMap: Record<string, string | null> = {};
   for (const task of whoisData?.tasks ?? []) {
     for (const item of task?.result ?? []) {
-      whoisMap[item.domain] = item.created_date ?? null;
+      const domain = item.domain ?? item.name;
+      const date = item.created_datetime ?? item.created_date ?? null;
+      if (domain) whoisMap[domain] = date;
     }
   }
 

@@ -78,7 +78,8 @@ function detectBlocks($: CheerioRoot, schemaTypes: string[], bodyText: string): 
   // Калькулятор / конфигуратор
   if (
     hasClass("calculator", "configurator", "calc", "конфигур", "калькул") ||
-    $("input[type='range'], input[type='number']").length > 1
+    $("input[type='range'], input[type='number']").length > 1 ||
+    /рассчита[тьй]|расчёт стоимости|расчет стоимости|узнать цену|посчитать|calculate|калькулятор/i.test(bodyText)
   ) blocks.push("calculator");
 
   // Карта / геолокация

@@ -39,7 +39,7 @@ export default async function DashboardPage() {
     prisma.project.count({ where: { userId: session.user.id } }),
   ]);
 
-  const usedPercent = user && user.reportsLimit > 0
+  const usedPercent = user && user.reportsLimit != null
     ? Math.round((user.reportsUsed / user.reportsLimit) * 100)
     : 0;
 
@@ -79,10 +79,10 @@ export default async function DashboardPage() {
             <div className="text-2xl font-bold">
               {user?.reportsUsed ?? 0}
               <span className="text-muted-foreground text-base font-normal">
-                {" "}/ {user?.reportsLimit === -1 ? "∞" : user?.reportsLimit ?? 3}
+                {" "}/ {user?.reportsLimit == null ? "∞" : user.reportsLimit}
               </span>
             </div>
-            {user && user.reportsLimit > 0 && (
+            {user && user.reportsLimit != null && (
               <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full rounded-full bg-primary transition-all"

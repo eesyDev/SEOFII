@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 
 interface SidebarProps {
   reportsUsed: number;
-  reportsLimit: number;
+  reportsLimit: number | null;
   plan: string;
 }
 
@@ -61,15 +61,15 @@ export default function Sidebar({ reportsUsed, reportsLimit, plan }: SidebarProp
         <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
           <div className="flex items-center justify-between mb-1">
             <p className="font-medium text-foreground capitalize">{plan.toLowerCase()} {t("plan")}</p>
-            <span className="tabular-nums">{reportsUsed} / {reportsLimit}</span>
+            <span className="tabular-nums">{reportsUsed} / {reportsLimit == null ? "∞" : reportsLimit}</span>
           </div>
           <div className="h-1.5 w-full rounded-full bg-background overflow-hidden mb-2">
             <div
               className={cn(
                 "h-full rounded-full transition-all",
-                reportsUsed >= reportsLimit ? "bg-destructive" : "bg-primary"
+                reportsLimit != null && reportsUsed >= reportsLimit ? "bg-destructive" : "bg-primary"
               )}
-              style={{ width: `${Math.min((reportsUsed / reportsLimit) * 100, 100)}%` }}
+              style={{ width: reportsLimit == null ? "100%" : `${Math.min((reportsUsed / reportsLimit) * 100, 100)}%` }}
             />
           </div>
           <p className="mb-2">{t("reportsUsed")}</p>

@@ -67,14 +67,14 @@ export default async function SettingsPage() {
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">{t("planDesc")}</span>
             <span className="font-medium">
-              {user.reportsUsed} / {user.reportsLimit === -1 ? "∞" : user.reportsLimit}
+              {user.reportsUsed} / {user.reportsLimit == null ? "∞" : user.reportsLimit}
             </span>
           </div>
-          {user.reportsLimit > 0 && (
+          {user.reportsLimit != null && (
             <div className="h-1.5 rounded-full bg-muted overflow-hidden">
               <div
                 className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${Math.min((user.reportsUsed / user.reportsLimit) * 100, 100)}%` }}
+                style={{ width: `${Math.min((user.reportsUsed / user.reportsLimit!) * 100, 100)}%` }}
               />
             </div>
           )}

@@ -1,4 +1,5 @@
 const USE_MOCK = !process.env.ANTHROPIC_API_KEY;
+const PSI_KEY = process.env.PAGESPEED_API_KEY ?? "";
 
 export interface PageSpeedData {
   score: number | null;   // 0–100
@@ -14,7 +15,8 @@ async function fetchPageSpeed(url: string): Promise<PageSpeedData> {
   try {
     const apiUrl =
       `https://www.googleapis.com/pagespeedonline/v5/runPagespeed` +
-      `?url=${encodeURIComponent(url)}&strategy=mobile&category=performance`;
+      `?url=${encodeURIComponent(url)}&strategy=mobile&category=performance` +
+      (PSI_KEY ? `&key=${PSI_KEY}` : "");
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15_000);
@@ -60,10 +62,23 @@ export async function fetchPageSpeeds(
     };
   }
 
-  const [target, ...competitors] = await Promise.all([
-    fetchPageSpeed(targetUrl),
-    ...competitorUrls.map(fetchPageSpeed),
-  ]);
+  // С ключом — параллельно. Без ключа — последовательно с паузой, иначе 429
+  let target: PageSpeedData;
+  let competitors: PageSpeedData[];
+
+  if (PSI_KEY) {
+    [target, ...competitors] = await Promise.all([
+      fetchPageSpeed(targetUrl),
+      ...competitorUrls.map(fetchPageSpeed),
+    ]);
+  } else {
+    const results: PageSpeedData[] = [];
+    for (const u of [targetUrl, ...competitorUrls]) {
+      results.push(await fetchPageSpeed(u));
+      if (results.length < 1 + competitorUrls.length) await new Promise((r) => setTimeout(r, 2000));
+    }
+    [target, ...competitors] = results;
+  }
 
   return { target, competitors };
 }

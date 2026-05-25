@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const user = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!user) return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
 
-  if (user.reportsUsed >= user.reportsLimit) {
+  if (user.reportsLimit !== null && user.reportsUsed >= user.reportsLimit) {
     return NextResponse.json(
       { error: "Лимит отчётов исчерпан. Перейди на платный план.", code: "LIMIT_REACHED" },
       { status: 403 }

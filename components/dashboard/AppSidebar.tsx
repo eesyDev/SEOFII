@@ -6,7 +6,7 @@ export default async function AppSidebar() {
   const session = await auth();
 
   let reportsUsed = 0;
-  let reportsLimit = 3;
+  let reportsLimit: number | null = 1;
   let plan = "FREE";
 
   const userId = session?.user?.id;

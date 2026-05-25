@@ -86,10 +86,10 @@ export default async function BillingPage({
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Отчётов использовано</span>
               <span className="font-medium tabular-nums">
-                {user.reportsUsed} / {user.reportsLimit === -1 ? "∞" : user.reportsLimit}
+                {user.reportsUsed} / {user.reportsLimit == null ? "∞" : user.reportsLimit}
               </span>
             </div>
-            {user.reportsLimit > 0 && (
+            {user.reportsLimit != null && (
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full rounded-full bg-primary transition-all"
@@ -165,7 +165,7 @@ export default async function BillingPage({
                     <span className="text-muted-foreground text-sm">/мес</span>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {plan.reportsLimit === -1 ? "Безлимитные отчёты" : `${plan.reportsLimit} отчётов / мес`}
+                    {plan.reportsLimit == null ? "Безлимитные отчёты" : `${plan.reportsLimit} отчётов / мес`}
                   </p>
                 </div>
 

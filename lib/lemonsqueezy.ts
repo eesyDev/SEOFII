@@ -6,7 +6,7 @@ export interface PlanConfig {
   id: "STARTER" | "PRO";
   name: string;
   price: number;
-  reportsLimit: number;
+  reportsLimit: number | null;
   variantId: string;
   features: string[];
 }
@@ -30,7 +30,7 @@ export const PLANS: PlanConfig[] = [
     id: "PRO",
     name: "Pro",
     price: 50,
-    reportsLimit: 10,
+    reportsLimit: 50,
     variantId: process.env.LEMON_VARIANT_PRO ?? "",
     features: [
       "10 отчётов в месяц",
