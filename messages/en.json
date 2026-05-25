@@ -1,0 +1,194 @@
+{
+  "Landing": {
+    "nav": {
+      "login": "Sign in",
+      "register": "Get started"
+    },
+    "hero": {
+      "badge": "Powered by Claude AI + DataForSEO",
+      "h1": "SEO analysis and ready",
+      "h1Accent": "content in minutes",
+      "subtitle": "Enter a URL — get a competitor breakdown, task list, and ready-to-paste content for your site.",
+      "ctaPrimary": "Try for free",
+      "ctaSecondary": "Sign in"
+    },
+    "stats": {
+      "timeValue": "1–2 min",
+      "timeLabel": "generation time",
+      "aiValue": "Claude AI",
+      "aiLabel": "under the hood",
+      "tasksValue": "5 tasks",
+      "tasksLabel": "what to do right now"
+    },
+    "howItWorks": {
+      "sectionLabel": "How it works",
+      "title": "Three steps — done",
+      "features": [
+        {
+          "title": "Competitor analysis",
+          "description": "Enter a URL — we find everyone ranking above you and analyze why"
+        },
+        {
+          "title": "Gap analysis & quick wins",
+          "description": "We show which keywords your competitors have that you don't — and what's easiest to fix"
+        },
+        {
+          "title": "Ready content",
+          "description": "Claude AI writes the title, H1, meta description, intro and FAQ — copy and paste"
+        }
+      ]
+    },
+    "pricing": {
+      "sectionLabel": "Pricing",
+      "title": "Start for free",
+      "subtitle": "Scale as you grow",
+      "plans": {
+        "free": {
+          "description": "Try risk-free",
+          "perks": ["1 report", "Competitor analysis", "Task list"],
+          "cta": "Start for free"
+        },
+        "starter": {
+          "description": "4 reports / mo",
+          "perks": ["Full competitor analysis", "Ready content to copy-paste", "FAQ and schema.org markup", "Email support"],
+          "cta": "Get Starter"
+        },
+        "pro": {
+          "description": "10 reports / mo",
+          "perks": ["Everything in Starter", "More reports", "Priority support"],
+          "cta": "Get Pro",
+          "badge": "Popular"
+        },
+        "agency": {
+          "description": "30 reports / mo",
+          "perks": ["Everything in Pro", "Team access", "White-label reports"],
+          "cta": "Coming soon"
+        }
+      }
+    },
+    "cta": {
+      "title": "Try it right now",
+      "subtitle": "First report free. No credit card.",
+      "button": "Get started free"
+    },
+    "footer": {
+      "copyright": "© 2026 SEOBrief. All rights reserved."
+    }
+  },
+  "Sidebar": {
+    "dashboard": "Dashboard",
+    "projects": "Projects",
+    "reports": "Reports",
+    "billing": "Billing",
+    "settings": "Settings",
+    "plan": "plan",
+    "reportsUsed": "reports used",
+    "upgradePro": "Upgrade to Pro →"
+  },
+  "Header": {
+    "profile": "Profile",
+    "settings": "Settings",
+    "signOut": "Sign out",
+    "toggleTheme": "Toggle theme"
+  },
+  "Auth": {
+    "login": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to your account",
+      "googleButton": "Sign in with Google",
+      "or": "or",
+      "emailLabel": "Email",
+      "passwordLabel": "Password",
+      "submit": "Sign in",
+      "submitting": "Signing in...",
+      "noAccount": "Don't have an account?",
+      "registerLink": "Sign up",
+      "invalidCredentials": "Invalid email or password"
+    },
+    "register": {
+      "title": "Create account",
+      "subtitle": "3 reports free — no card required",
+      "googleButton": "Sign up with Google",
+      "or": "or",
+      "nameLabel": "Name",
+      "namePlaceholder": "John Smith",
+      "emailLabel": "Email",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "At least 8 characters",
+      "ruleLength": "At least 8 characters",
+      "ruleLetter": "At least one letter",
+      "ruleDigit": "At least one digit",
+      "submit": "Sign up",
+      "submitting": "Creating account...",
+      "hasAccount": "Already have an account?",
+      "loginLink": "Sign in",
+      "errorGeneric": "Registration failed",
+      "errorLoginAfterRegister": "Account created, but could not sign in. Please sign in manually."
+    }
+  },
+  "Dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome, {name}",
+    "newReport": "New report",
+    "reportsUsedLabel": "Reports used",
+    "projectsLabel": "Projects",
+    "planLabel": "Plan",
+    "manageLink": "Manage →",
+    "upgradeLink": "Upgrade plan →",
+    "recentReports": "Recent reports",
+    "allReports": "All reports",
+    "emptyText": "No reports yet",
+    "emptyButton": "Create your first report",
+    "statusPending": "Queued",
+    "statusProcessing": "Processing",
+    "statusDone": "Ready",
+    "statusFailed": "Error"
+  },
+  "Billing": {
+    "title": "Billing",
+    "subtitle": "Manage your subscription and plan",
+    "currentPlan": "Current plan",
+    "nextBilling": "Next billing: {date}",
+    "reportsUsed": "Reports used",
+    "plans": "Plans",
+    "manageSub": "Manage subscription",
+    "manageSubText": "To cancel or get invoices — contact support or manage via LemonSqueezy.",
+    "active": "Active",
+    "current": "Current",
+    "popular": "Popular",
+    "unlimited": "Unlimited reports",
+    "reportsPerMonth": "{count} reports / mo",
+    "free": { "description": "Try risk-free" },
+    "comingSoon": "Coming soon — contact us",
+    "freeFeatures": ["1 report", "Competitor analysis", "Task list (no ready content)"]
+  },
+  "Settings": {
+    "title": "Settings",
+    "subtitle": "Manage your profile and account",
+    "profileTitle": "Profile",
+    "profileDesc": "Name and email",
+    "passwordTitle": "Password",
+    "passwordDesc": "Change your account password",
+    "planTitle": "Plan",
+    "planDesc": "Current plan and usage"
+  },
+  "Reports": {
+    "title": "Reports",
+    "newReport": "New report",
+    "emptyText": "No reports yet",
+    "emptyButton": "Create your first report",
+    "statusPending": "Queued",
+    "statusProcessing": "Processing",
+    "statusDone": "Ready",
+    "statusFailed": "Error"
+  },
+  "Projects": {
+    "title": "Projects",
+    "newProject": "New project",
+    "emptyText": "No projects yet",
+    "emptyButton": "Create your first project"
+  },
+  "Common": {
+    "copyright": "© 2026 SEOBrief"
+  }
+}

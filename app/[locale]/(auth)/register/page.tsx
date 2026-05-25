@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { useRouter } from "@/i18n/navigation";
+import { Link } from "@/i18n/navigation";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ function PasswordRule({ met, label }: { met: boolean; label: string }) {
 }
 
 export default function RegisterPage() {
+  const t = useTranslations("Auth.register");
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -41,7 +43,6 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
 
-    // Шаг 1: регистрация
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -51,22 +52,21 @@ export default function RegisterPage() {
     const data = await res.json();
 
     if (!res.ok) {
-      setError(typeof data.error === "string" ? data.error : "Ошибка регистрации");
+      setError(typeof data.error === "string" ? data.error : t("errorGeneric"));
       setLoading(false);
       return;
     }
 
-    // Шаг 2: логин сразу после регистрации
     const result = await signIn("credentials", { email, password, redirect: false });
 
     if (result?.error) {
-      setError("Аккаунт создан, но не удалось войти. Попробуй войти вручную.");
+      setError(t("errorLoginAfterRegister"));
       setLoading(false);
       return;
     }
 
     router.push("/dashboard");
-    router.refresh(); // обновляем Server Components с новой сессией
+    router.refresh();
   }
 
   return (
@@ -79,69 +79,54 @@ export default function RegisterPage() {
 
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-xl">Создать аккаунт</CardTitle>
-            <CardDescription>3 отчёта бесплатно — без карты</CardDescription>
+            <CardTitle className="text-xl">{t("title")}</CardTitle>
+            <CardDescription>{t("subtitle")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-            >
+            <Button variant="outline" className="w-full" onClick={() => signIn("google", { callbackUrl: "/dashboard" })}>
               <Globe className="h-4 w-4 mr-2" />
-              Зарегистрироваться через Google
+              {t("googleButton")}
             </Button>
 
             <div className="flex items-center gap-3">
               <Separator className="flex-1" />
-              <span className="text-xs text-muted-foreground">или</span>
+              <span className="text-xs text-muted-foreground">{t("or")}</span>
               <Separator className="flex-1" />
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="name">Имя</Label>
+                <Label htmlFor="name">{t("nameLabel")}</Label>
                 <Input
-                  id="name"
-                  placeholder="Иван Иванов"
+                  id="name" placeholder={t("namePlaceholder")}
                   value={name}
                   onChange={(e) => { setName(e.target.value); setError(""); }}
-                  className={error ? "border-destructive focus-visible:ring-destructive" : ""}
                   required
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t("emailLabel")}</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
+                  id="email" type="email" placeholder="you@example.com"
                   value={email}
                   onChange={(e) => { setEmail(e.target.value); setError(""); }}
-                  className={error ? "border-destructive focus-visible:ring-destructive" : ""}
                   required
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="password">Пароль</Label>
+                <Label htmlFor="password">{t("passwordLabel")}</Label>
                 <Input
-                  id="password"
-                  type="password"
-                  placeholder="Минимум 8 символов"
+                  id="password" type="password" placeholder={t("passwordPlaceholder")}
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                  className={
-                    password.length > 0 && !passwordValid
-                      ? "border-destructive focus-visible:ring-destructive"
-                      : ""
-                  }
+                  className={password.length > 0 && !passwordValid ? "border-destructive focus-visible:ring-destructive" : ""}
                   required
                 />
                 {password.length > 0 && (
                   <ul className="mt-1.5 space-y-1">
-                    <PasswordRule met={passwordChecks.length}  label="Минимум 8 символов" />
-                    <PasswordRule met={passwordChecks.letter}  label="Хотя бы одна буква" />
-                    <PasswordRule met={passwordChecks.digit}   label="Хотя бы одна цифра" />
+                    <PasswordRule met={passwordChecks.length} label={t("ruleLength")} />
+                    <PasswordRule met={passwordChecks.letter} label={t("ruleLetter")} />
+                    <PasswordRule met={passwordChecks.digit}  label={t("ruleDigit")} />
                   </ul>
                 )}
               </div>
@@ -154,14 +139,14 @@ export default function RegisterPage() {
               )}
 
               <Button type="submit" className="w-full" disabled={loading || !passwordValid}>
-                {loading ? "Создаём аккаунт..." : "Зарегистрироваться"}
+                {loading ? t("submitting") : t("submit")}
               </Button>
             </form>
 
             <p className="text-center text-sm text-muted-foreground">
-              Уже есть аккаунт?{" "}
+              {t("hasAccount")}{" "}
               <Link href="/login" className="underline underline-offset-4 hover:text-foreground">
-                Войти
+                {t("loginLink")}
               </Link>
             </p>
           </CardContent>

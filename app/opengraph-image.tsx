@@ -84,17 +84,16 @@ export default function OgImage() {
         {/* Headline */}
         <div
           style={{
+            display: "flex",
+            flexDirection: "column",
             fontSize: 64,
             fontWeight: 600,
-            color: "white",
             lineHeight: 1.1,
             letterSpacing: "-1.5px",
             marginBottom: 24,
-            maxWidth: 780,
           }}
         >
-          SEO-анализ и готовый
-          <br />
+          <span style={{ color: "white" }}>SEO-анализ и готовый</span>
           <span style={{ color: "#fd356e" }}>контент за минуту</span>
         </div>
 

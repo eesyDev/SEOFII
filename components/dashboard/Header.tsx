@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -12,8 +13,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LogOut, Settings, User, Sun, Moon } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { useTheme } from "@/components/providers/ThemeProvider";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 interface HeaderProps {
   user: {
@@ -24,6 +26,7 @@ interface HeaderProps {
 }
 
 export default function Header({ user }: HeaderProps) {
+  const t = useTranslations("Header");
   const [mounted, setMounted] = useState(false);
   const { resolvedTheme, setTheme } = useTheme();
   useEffect(() => setMounted(true), []);
@@ -42,10 +45,11 @@ export default function Header({ user }: HeaderProps) {
 
   return (
     <header className="h-14 border-b flex items-center justify-end gap-2 px-6 bg-background">
+      <LanguageSwitcher />
       <button
         onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-        aria-label="Переключить тему"
+        aria-label={t("toggleTheme")}
       >
         {resolvedTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
       </button>
@@ -55,9 +59,7 @@ export default function Header({ user }: HeaderProps) {
             <AvatarImage src={user.image ?? undefined} />
             <AvatarFallback className="text-xs font-medium">{initials}</AvatarFallback>
           </Avatar>
-          <span className="text-sm font-medium hidden sm:block">
-            {user.name ?? user.email}
-          </span>
+          <span className="text-sm font-medium hidden sm:block">{user.name ?? user.email}</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuLabel className="text-xs text-muted-foreground font-normal truncate">
@@ -67,13 +69,13 @@ export default function Header({ user }: HeaderProps) {
           <DropdownMenuItem asChild>
             <Link href="/settings">
               <User className="h-4 w-4 mr-2" />
-              Профиль
+              {t("profile")}
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href="/settings">
               <Settings className="h-4 w-4 mr-2" />
-              Настройки
+              {t("settings")}
             </Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -82,7 +84,7 @@ export default function Header({ user }: HeaderProps) {
             onClick={() => signOut({ callbackUrl: "/" })}
           >
             <LogOut className="h-4 w-4 mr-2" />
-            Выйти
+            {t("signOut")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

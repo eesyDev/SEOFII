@@ -1,25 +1,32 @@
+import createIntlMiddleware from "next-intl/middleware";
 import { auth } from "@/lib/auth";
+import { routing } from "./i18n/routing";
 import { NextResponse } from "next/server";
 
-// Роуты которые требуют авторизации
-const PROTECTED = ["/dashboard", "/projects", "/reports"];
+const intlMiddleware = createIntlMiddleware(routing);
+
+const PROTECTED = ["/dashboard", "/projects", "/reports", "/billing", "/settings"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
-  const isProtected = PROTECTED.some((p) => pathname.startsWith(p));
+
+  // Strip locale prefix to get the actual path
+  const pathnameNoLocale = pathname.replace(/^\/(ru|en)(?=\/|$)/, "") || "/";
+
+  const isProtected = PROTECTED.some((p) => pathnameNoLocale.startsWith(p));
+  const locale = pathname.match(/^\/(ru|en)/)?.[1] ?? "ru";
 
   if (isProtected && !req.auth) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    return NextResponse.redirect(new URL(`/${locale}/login`, req.url));
   }
 
-  // Авторизованных со страниц /login и /register — на дашборд
-  if (req.auth && (pathname === "/login" || pathname === "/register")) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+  if (req.auth && (pathnameNoLocale === "/login" || pathnameNoLocale === "/register")) {
+    return NextResponse.redirect(new URL(`/${locale}/dashboard`, req.url));
   }
 
-  return NextResponse.next();
+  return intlMiddleware(req);
 });
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|.*\\..*).*)"],
 };

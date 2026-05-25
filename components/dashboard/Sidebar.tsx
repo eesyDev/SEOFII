@@ -1,18 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { LayoutDashboard, FolderOpen, FileText, Settings, Zap, CreditCard } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-
-const navItems = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Дашборд" },
-  { href: "/projects", icon: FolderOpen, label: "Проекты" },
-  { href: "/reports", icon: FileText, label: "Отчёты" },
-  { href: "/billing", icon: CreditCard, label: "Биллинг" },
-  { href: "/settings", icon: Settings, label: "Настройки" },
-];
 
 interface SidebarProps {
   reportsUsed: number;
@@ -21,21 +14,31 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ reportsUsed, reportsLimit, plan }: SidebarProps) {
+  const t = useTranslations("Sidebar");
   const pathname = usePathname();
+
+  const navItems = [
+    { href: "/dashboard" as const, icon: LayoutDashboard, label: t("dashboard") },
+    { href: "/projects"  as const, icon: FolderOpen,      label: t("projects") },
+    { href: "/reports"   as const, icon: FileText,         label: t("reports") },
+    { href: "/billing"   as const, icon: CreditCard,       label: t("billing") },
+    { href: "/settings"  as const, icon: Settings,         label: t("settings") },
+  ];
+
+  // Strip locale prefix for active check
+  const pathNoLocale = pathname.replace(/^\/(ru|en)/, "") || "/";
 
   return (
     <aside className="hidden md:flex flex-col w-60 border-r bg-background min-h-screen">
-      {/* Лого */}
       <Link href="/" className="flex items-center gap-2 px-6 py-5 border-b hover:opacity-80 transition-opacity">
         <Zap className="h-5 w-5 text-primary" />
         <span className="font-bold text-lg">SEOBrief</span>
         <Badge variant="secondary" className="text-xs ml-auto">Beta</Badge>
       </Link>
 
-      {/* Навигация */}
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navItems.map(({ href, icon: Icon, label }) => {
-          const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+          const active = pathNoLocale === href || (href !== "/dashboard" && pathNoLocale.startsWith(href));
           return (
             <Link
               key={href}
@@ -54,11 +57,10 @@ export default function Sidebar({ reportsUsed, reportsLimit, plan }: SidebarProp
         })}
       </nav>
 
-      {/* Использование / апгрейд */}
       <div className="px-3 py-4 border-t">
         <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
           <div className="flex items-center justify-between mb-1">
-            <p className="font-medium text-foreground capitalize">{plan.toLowerCase()} план</p>
+            <p className="font-medium text-foreground capitalize">{plan.toLowerCase()} {t("plan")}</p>
             <span className="tabular-nums">{reportsUsed} / {reportsLimit}</span>
           </div>
           <div className="h-1.5 w-full rounded-full bg-background overflow-hidden mb-2">
@@ -70,10 +72,10 @@ export default function Sidebar({ reportsUsed, reportsLimit, plan }: SidebarProp
               style={{ width: `${Math.min((reportsUsed / reportsLimit) * 100, 100)}%` }}
             />
           </div>
-          <p className="mb-2">отчётов использовано</p>
+          <p className="mb-2">{t("reportsUsed")}</p>
           {plan === "FREE" && (
             <Link href="/billing" className="block text-primary font-medium hover:underline">
-              Перейти на Pro →
+              {t("upgradePro")}
             </Link>
           )}
         </div>

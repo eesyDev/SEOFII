@@ -1,130 +1,85 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { getTranslations, getLocale } from "next-intl/server";
+import { Link } from "@/i18n/navigation";
 import { Search, BarChart2, FileText, Check, Zap, ArrowRight, Sparkles, TrendingUp, Clock } from "lucide-react";
 import HeroVisual from "@/components/landing/HeroVisual";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
-export const metadata: Metadata = {
-  title: "SEOBrief — SEO-анализ и готовый контент за минуту",
-  description:
-    "Вставь URL — получи разбор конкурентов, gap-анализ и готовые тексты (title, H1, meta, FAQ) которые можно сразу скопировать на сайт. Первый отчёт бесплатно.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  return locale === "ru"
+    ? {
+        title: "SEOBrief — SEO-анализ и готовый контент за минуту",
+        description:
+          "Вставь URL — получи разбор конкурентов, gap-анализ и готовые тексты (title, H1, meta, FAQ) которые можно сразу скопировать на сайт. Первый отчёт бесплатно.",
+      }
+    : {
+        title: "SEOBrief — SEO analysis and ready content in minutes",
+        description:
+          "Enter a URL — get a competitor breakdown, gap analysis, and ready-to-paste texts (title, H1, meta, FAQ) for your site. First report free.",
+      };
+}
 
-const features = [
-  {
-    icon: Search,
-    step: "01",
-    title: "Анализ конкурентов",
-    description: "Вставь URL — находим всех кто ранжируется выше тебя и разбираем почему",
-  },
-  {
-    icon: BarChart2,
-    step: "02",
-    title: "Gap-анализ и quick wins",
-    description: "Показываем какие ключевые слова у конкурентов есть, а у тебя нет — и что проще всего исправить",
-  },
-  {
-    icon: FileText,
-    step: "03",
-    title: "Готовый контент",
-    description: "Claude AI пишет title, H1, meta description, первый абзац и FAQ — копируй и вставляй",
-  },
-];
+const FEATURE_ICONS = [Search, BarChart2, FileText];
+const STAT_ICONS = [TrendingUp, Sparkles, Clock];
+const PLAN_NAMES = ["Free", "Starter", "Pro", "Agency"] as const;
+const PLAN_PRICES = ["0", "25", "50", "120"];
 
-const plans = [
-  {
-    name: "Free",
-    price: "0",
-    description: "Попробуй без рисков",
-    perks: ["1 отчёт", "Анализ конкурентов", "Список задач"],
-    cta: "Начать бесплатно",
-    highlight: false,
-    agency: false,
-  },
-  {
-    name: "Starter",
-    price: "25",
-    description: "4 отчёта / мес",
-    perks: ["Полный анализ конкурентов", "Готовый контент для копипаста", "FAQ и schema.org разметка", "Email поддержка"],
-    cta: "Выбрать Starter",
-    highlight: false,
-    agency: false,
-  },
-  {
-    name: "Pro",
-    price: "50",
-    description: "10 отчётов / мес",
-    perks: ["Всё из Starter", "Больше отчётов", "Приоритетная поддержка"],
-    cta: "Выбрать Pro",
-    highlight: true,
-    agency: false,
-  },
-  {
-    name: "Agency",
-    price: "120",
-    description: "30 отчётов / мес",
-    perks: ["Всё из Pro", "Командный доступ", "White-label отчёты"],
-    cta: "Скоро",
-    highlight: false,
-    agency: true,
-  },
-];
+export default async function HomePage() {
+  const t = await getTranslations("Landing");
 
-const stats = [
-  { icon: TrendingUp, value: "1–2 мин", label: "время генерации" },
-  { icon: Sparkles,   value: "Claude AI", label: "под капотом" },
-  { icon: Clock,      value: "5 задач",   label: "что делать прямо сейчас" },
-];
+  const features = FEATURE_ICONS.map((icon, i) => ({
+    icon,
+    step: String(i + 1).padStart(2, "0"),
+    title: t(`howItWorks.features.${i}.title`),
+    description: t(`howItWorks.features.${i}.description`),
+  }));
 
-const jsonLd = {
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "SoftwareApplication",
-      "name": "SEOBrief",
-      "applicationCategory": "BusinessApplication",
-      "operatingSystem": "Web",
-      "url": "https://seobrief.ru",
-      "description":
-        "SEO-анализ конкурентов, gap-анализ ключевых слов и генерация готового контента (title, H1, meta description, FAQ) на основе Claude AI.",
-      "offers": [
-        {
+  const stats = [
+    { icon: STAT_ICONS[0], value: t("stats.timeValue"),  label: t("stats.timeLabel") },
+    { icon: STAT_ICONS[1], value: t("stats.aiValue"),    label: t("stats.aiLabel") },
+    { icon: STAT_ICONS[2], value: t("stats.tasksValue"), label: t("stats.tasksLabel") },
+  ];
+
+  const plans = PLAN_NAMES.map((name, i) => {
+    const key = name.toLowerCase() as "free" | "starter" | "pro" | "agency";
+    return {
+      name,
+      price: PLAN_PRICES[i],
+      description: t(`pricing.plans.${key}.description`),
+      perks: t.raw(`pricing.plans.${key}.perks`) as string[],
+      cta: t(`pricing.plans.${key}.cta`),
+      highlight: name === "Pro",
+      agency: name === "Agency",
+    };
+  });
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "name": "SEOBrief",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "url": "https://seobrief.ru",
+        "description": t("hero.subtitle"),
+        "offers": PLAN_NAMES.slice(0, 3).map((name, i) => ({
           "@type": "Offer",
-          "name": "Free",
-          "price": "0",
+          "name": name,
+          "price": PLAN_PRICES[i],
           "priceCurrency": "USD",
-          "description": "1 отчёт бесплатно",
-        },
-        {
-          "@type": "Offer",
-          "name": "Starter",
-          "price": "25",
-          "priceCurrency": "USD",
-          "description": "4 отчёта в месяц",
-        },
-        {
-          "@type": "Offer",
-          "name": "Pro",
-          "price": "50",
-          "priceCurrency": "USD",
-          "description": "10 отчётов в месяц",
-        },
-      ],
-    },
-    {
-      "@type": "Organization",
-      "name": "SEOBrief",
-      "url": "https://seobrief.ru",
-      "logo": "https://seobrief.ru/opengraph-image",
-      "contactPoint": {
-        "@type": "ContactPoint",
-        "contactType": "customer support",
-        "email": "support@seobrief.ru",
+          "description": t(`pricing.plans.${name.toLowerCase() as "free" | "starter" | "pro"}.description`),
+        })),
       },
-    },
-  ],
-};
+      {
+        "@type": "Organization",
+        "name": "SEOBrief",
+        "url": "https://seobrief.ru",
+      },
+    ],
+  };
 
-export default function HomePage() {
   return (
     <div className="min-h-screen bg-[#060a0f] text-white overflow-x-hidden">
       <script
@@ -132,7 +87,7 @@ export default function HomePage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      {/* ── НАВИГАЦИЯ ── */}
+      {/* ── NAV ── */}
       <header className="fixed top-0 inset-x-0 z-50 border-b border-white/[0.06] bg-[#060a0f]/80 backdrop-blur-xl">
         <div className="container mx-auto flex h-16 items-center justify-between px-5">
           <div className="flex items-center gap-2">
@@ -145,17 +100,15 @@ export default function HomePage() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-sm text-zinc-400 hover:text-white transition-colors px-3 py-1.5"
-            >
-              Войти
+            <LanguageSwitcher />
+            <Link href="/login" className="text-sm text-zinc-400 hover:text-white transition-colors px-3 py-1.5">
+              {t("nav.login")}
             </Link>
             <Link
               href="/register"
               className="flex items-center gap-1.5 rounded-lg bg-[#fd356e] px-4 py-2 text-sm font-medium text-white hover:bg-[#ff5a84] transition-colors"
             >
-              Начать бесплатно <ArrowRight className="h-3.5 w-3.5" />
+              {t("nav.register")} <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>
@@ -163,7 +116,6 @@ export default function HomePage() {
 
       {/* ── HERO ── */}
       <section className="relative flex min-h-screen items-center px-5 pt-16">
-        {/* Glow blobs */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="animate-blob absolute -left-40 top-1/4 h-[500px] w-[500px] rounded-full bg-[#fd356e]/15 blur-[120px]" />
           <div className="animate-blob-delay absolute -right-40 top-1/3 h-[400px] w-[400px] rounded-full bg-violet-600/10 blur-[120px]" />
@@ -172,43 +124,39 @@ export default function HomePage() {
 
         <div className="container mx-auto max-w-6xl w-full py-20">
           <div className="grid grid-cols-1 items-center gap-16 lg:grid-cols-2">
-
-            {/* Left: text */}
             <div className="animate-fade-up">
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#fd356e]/20 bg-[#fd356e]/5 px-4 py-1.5 text-sm text-[#fd356e]/80">
                 <Sparkles className="h-3.5 w-3.5 text-[#fd356e]" />
-                Powered by Claude AI + DataForSEO
+                {t("hero.badge")}
               </div>
 
               <h1 className="mb-6 text-5xl font-semibold leading-tight tracking-tight sm:text-6xl">
-                SEO-анализ и готовый
+                {t("hero.h1")}
                 <br />
                 <span className="animate-gradient-text bg-gradient-to-r from-[#fd356e] via-[#ff8fab] to-[#fd356e] bg-clip-text text-transparent">
-                  контент за минуту
+                  {t("hero.h1Accent")}
                 </span>
               </h1>
 
               <p className="mb-10 max-w-xl text-lg leading-relaxed text-zinc-400 font-light">
-                Вставь URL — получи разбор конкурентов, список задач и готовые тексты
-                которые можно сразу скопировать на сайт.
+                {t("hero.subtitle")}
               </p>
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Link
                   href="/register"
-                  className="flex items-center justify-center gap-2 rounded-xl bg-[#fd356e] px-8 py-3.5 text-base font-medium text-white shadow-lg shadow-[#fd356e]/25 hover:bg-[#ff5a84] transition-all hover:shadow-[#fd356e]/30"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-[#fd356e] px-8 py-3.5 text-base font-medium text-white shadow-lg shadow-[#fd356e]/25 hover:bg-[#ff5a84] transition-all"
                 >
-                  Попробовать бесплатно <ArrowRight className="h-4 w-4" />
+                  {t("hero.ctaPrimary")} <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link
                   href="/login"
                   className="flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-8 py-3.5 text-base font-medium text-zinc-300 hover:bg-white/10 hover:text-white transition-all"
                 >
-                  Войти в аккаунт
+                  {t("hero.ctaSecondary")}
                 </Link>
               </div>
 
-              {/* Stats */}
               <div className="mt-12 flex flex-col gap-5 sm:flex-row sm:gap-10">
                 {stats.map((s) => (
                   <div key={s.label} className="flex items-center gap-3 text-sm">
@@ -224,29 +172,29 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Right: 3D Visual */}
             <div className="hidden lg:flex items-center justify-center">
               <HeroVisual />
             </div>
           </div>
         </div>
 
-        {/* Scroll indicator */}
         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-zinc-600">
           <div className="h-6 w-[1px] bg-gradient-to-b from-transparent to-zinc-600" />
           <span className="text-[10px] tracking-widest uppercase">Scroll</span>
         </div>
       </section>
 
-      {/* ── КАК РАБОТАЕТ ── */}
+      {/* ── HOW IT WORKS ── */}
       <section className="relative py-28 px-5">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[400px] w-[600px] rounded-full bg-[#fd356e]/5 blur-[100px]" />
         </div>
         <div className="container mx-auto max-w-5xl">
           <div className="mb-16 text-center">
-            <p className="mb-3 text-sm font-medium text-[#fd356e] uppercase tracking-widest">Как это работает</p>
-            <h2 className="text-4xl font-semibold">Три шага — и готово</h2>
+            <p className="mb-3 text-sm font-medium text-[#fd356e] uppercase tracking-widest">
+              {t("howItWorks.sectionLabel")}
+            </p>
+            <h2 className="text-4xl font-semibold">{t("howItWorks.title")}</h2>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
             {features.map((f) => (
@@ -271,16 +219,18 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── ТАРИФЫ ── */}
+      {/* ── PRICING ── */}
       <section className="relative py-28 px-5">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute -right-40 bottom-0 h-[400px] w-[400px] rounded-full bg-[#fd356e]/8 blur-[100px]" />
         </div>
         <div className="container mx-auto max-w-5xl">
           <div className="mb-16 text-center">
-            <p className="mb-3 text-sm font-medium text-[#fd356e] uppercase tracking-widest">Тарифы</p>
-            <h2 className="text-4xl font-semibold">Начни бесплатно</h2>
-            <p className="mt-3 text-zinc-400">Масштабируй по мере роста</p>
+            <p className="mb-3 text-sm font-medium text-[#fd356e] uppercase tracking-widest">
+              {t("pricing.sectionLabel")}
+            </p>
+            <h2 className="text-4xl font-semibold">{t("pricing.title")}</h2>
+            <p className="mt-3 text-zinc-400">{t("pricing.subtitle")}</p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -295,21 +245,17 @@ export default function HomePage() {
               >
                 {plan.highlight && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#fd356e] px-3 py-0.5 text-xs font-medium text-white">
-                    Популярный
+                    {t("pricing.plans.pro.badge")}
                   </div>
                 )}
-
                 <div className="mb-5">
                   <p className="text-sm font-medium text-zinc-400 mb-1">{plan.name}</p>
                   <div className="flex items-baseline gap-1">
                     <span className="text-4xl font-semibold">${plan.price}</span>
-                    {plan.price !== "0" && (
-                      <span className="text-zinc-500 text-sm">/мес</span>
-                    )}
+                    {plan.price !== "0" && <span className="text-zinc-500 text-sm">/mo</span>}
                   </div>
                   <p className="mt-1 text-xs text-zinc-500">{plan.description}</p>
                 </div>
-
                 <ul className="mb-6 flex-1 space-y-2">
                   {plan.perks.map((perk) => (
                     <li key={perk} className="flex items-start gap-2 text-sm text-zinc-300">
@@ -318,7 +264,6 @@ export default function HomePage() {
                     </li>
                   ))}
                 </ul>
-
                 <Link
                   href={plan.agency ? "#" : "/register"}
                   className={`flex items-center justify-center rounded-xl py-2.5 text-sm font-medium transition-all ${
@@ -337,21 +282,19 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── CTA BOTTOM ── */}
+      {/* ── CTA ── */}
       <section className="relative py-28 px-5">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[400px] w-[600px] rounded-full bg-[#fd356e]/8 blur-[100px]" />
         </div>
         <div className="container mx-auto max-w-2xl text-center relative">
-          <h2 className="text-4xl font-semibold mb-4">Попробуй прямо сейчас</h2>
-          <p className="text-zinc-400 mb-8 text-lg font-light">
-            Первый отчёт бесплатно. Без кредитной карты.
-          </p>
+          <h2 className="text-4xl font-semibold mb-4">{t("cta.title")}</h2>
+          <p className="text-zinc-400 mb-8 text-lg font-light">{t("cta.subtitle")}</p>
           <Link
             href="/register"
             className="inline-flex items-center gap-2 rounded-xl bg-[#fd356e] px-8 py-3.5 text-base font-medium text-white shadow-lg shadow-[#fd356e]/25 hover:bg-[#ff5a84] transition-all"
           >
-            Начать бесплатно <ArrowRight className="h-4 w-4" />
+            {t("cta.button")} <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </section>
@@ -363,7 +306,7 @@ export default function HomePage() {
             <Zap className="h-4 w-4 text-[#fd356e]/50" />
             <span>SEOBrief</span>
           </div>
-          <p>© 2026 SEOBrief. Все права защищены.</p>
+          <p>{t("footer.copyright")}</p>
         </div>
       </footer>
     </div>

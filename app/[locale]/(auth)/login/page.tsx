@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { useRouter } from "@/i18n/navigation";
+import { Link } from "@/i18n/navigation";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { Zap, Globe, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
+  const t = useTranslations("Auth.login");
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,14 +25,10 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    const result = await signIn("credentials", { email, password, redirect: false });
 
     if (result?.error) {
-      setError("Неверный email или пароль");
+      setError(t("invalidCredentials"));
       setLoading(false);
       return;
     }
@@ -49,34 +47,26 @@ export default function LoginPage() {
 
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-xl">Добро пожаловать</CardTitle>
-            <CardDescription>Войдите в свой аккаунт</CardDescription>
+            <CardTitle className="text-xl">{t("title")}</CardTitle>
+            <CardDescription>{t("subtitle")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Google OAuth */}
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-            >
+            <Button variant="outline" className="w-full" onClick={() => signIn("google", { callbackUrl: "/dashboard" })}>
               <Globe className="h-4 w-4 mr-2" />
-              Войти через Google
+              {t("googleButton")}
             </Button>
 
             <div className="flex items-center gap-3">
               <Separator className="flex-1" />
-              <span className="text-xs text-muted-foreground">или</span>
+              <span className="text-xs text-muted-foreground">{t("or")}</span>
               <Separator className="flex-1" />
             </div>
 
-            {/* Email/password */}
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t("emailLabel")}</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
+                  id="email" type="email" placeholder="you@example.com"
                   value={email}
                   onChange={(e) => { setEmail(e.target.value); setError(""); }}
                   className={error ? "border-destructive focus-visible:ring-destructive" : ""}
@@ -84,11 +74,9 @@ export default function LoginPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="password">Пароль</Label>
+                <Label htmlFor="password">{t("passwordLabel")}</Label>
                 <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
+                  id="password" type="password" placeholder="••••••••"
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError(""); }}
                   className={error ? "border-destructive focus-visible:ring-destructive" : ""}
@@ -104,14 +92,14 @@ export default function LoginPage() {
               )}
 
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Входим..." : "Войти"}
+                {loading ? t("submitting") : t("submit")}
               </Button>
             </form>
 
             <p className="text-center text-sm text-muted-foreground">
-              Нет аккаунта?{" "}
+              {t("noAccount")}{" "}
               <Link href="/register" className="underline underline-offset-4 hover:text-foreground">
-                Зарегистрироваться
+                {t("registerLink")}
               </Link>
             </p>
           </CardContent>

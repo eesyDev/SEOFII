@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import ProfileForm from "@/components/settings/ProfileForm";
 import PasswordForm from "@/components/settings/PasswordForm";
@@ -9,6 +10,8 @@ import { Separator } from "@/components/ui/separator";
 export default async function SettingsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+
+  const t = await getTranslations("Settings");
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -26,14 +29,14 @@ export default async function SettingsPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Настройки</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Управляй профилем и аккаунтом</p>
+        <h1 className="text-2xl font-bold">{t("title")}</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">{t("subtitle")}</p>
       </div>
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-base font-semibold">Профиль</h2>
-          <p className="text-sm text-muted-foreground">Имя и email</p>
+          <h2 className="text-base font-semibold">{t("profileTitle")}</h2>
+          <p className="text-sm text-muted-foreground">{t("profileDesc")}</p>
         </div>
         <Separator />
         <ProfileForm name={user.name ?? ""} email={user.email} image={user.image} />
@@ -42,8 +45,8 @@ export default async function SettingsPage() {
       {hasPassword && (
         <section className="space-y-4">
           <div>
-            <h2 className="text-base font-semibold">Пароль</h2>
-            <p className="text-sm text-muted-foreground">Смени пароль от аккаунта</p>
+            <h2 className="text-base font-semibold">{t("passwordTitle")}</h2>
+            <p className="text-sm text-muted-foreground">{t("passwordDesc")}</p>
           </div>
           <Separator />
           <PasswordForm />
@@ -52,17 +55,17 @@ export default async function SettingsPage() {
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-base font-semibold">Тариф</h2>
-          <p className="text-sm text-muted-foreground">Текущий план и использование</p>
+          <h2 className="text-base font-semibold">{t("planTitle")}</h2>
+          <p className="text-sm text-muted-foreground">{t("planDesc")}</p>
         </div>
         <Separator />
         <div className="rounded-xl border bg-background p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Текущий план</span>
+            <span className="text-sm text-muted-foreground">{t("planTitle")}</span>
             <span className="font-semibold capitalize">{user.plan.toLowerCase()}</span>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Отчётов использовано</span>
+            <span className="text-muted-foreground">{t("planDesc")}</span>
             <span className="font-medium">
               {user.reportsUsed} / {user.reportsLimit === -1 ? "∞" : user.reportsLimit}
             </span>
@@ -76,15 +79,6 @@ export default async function SettingsPage() {
             </div>
           )}
         </div>
-      </section>
-
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-base font-semibold text-destructive">Опасная зона</h2>
-          <p className="text-sm text-muted-foreground">Необратимые действия</p>
-        </div>
-        <Separator />
-        <DangerZone />
       </section>
     </div>
   );
