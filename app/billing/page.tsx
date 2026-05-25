@@ -9,10 +9,23 @@ import CheckoutButton from "@/components/billing/CheckoutButton";
 import SuccessBanner from "@/components/billing/SuccessBanner";
 
 const FREE_FEATURES = [
-  "3 отчёта в месяц",
-  "Базовый анализ конкурентов",
-  "Email поддержка",
+  "1 отчёт",
+  "Анализ конкурентов",
+  "Список задач (без готового контента)",
 ];
+
+const AGENCY_PLAN = {
+  name: "Agency",
+  price: 120,
+  reportsLimit: 30,
+  features: [
+    "30 отчётов в месяц",
+    "Всё из Pro",
+    "Командный доступ",
+    "White-label отчёты",
+    "Приоритетная поддержка",
+  ],
+};
 
 export default async function BillingPage({
   searchParams,
@@ -95,7 +108,7 @@ export default async function BillingPage({
         <h2 className="text-base font-semibold">Планы</h2>
         <Separator />
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {/* Free */}
           <div className={`rounded-xl border bg-background p-5 flex flex-col gap-4 ${currentPlan === "FREE" ? "border-primary ring-1 ring-primary" : ""}`}>
             <div>
@@ -119,7 +132,7 @@ export default async function BillingPage({
             <div className="h-9" /> {/* placeholder для выравнивания */}
           </div>
 
-          {/* Starter и Pro */}
+          {/* Starter, Pro */}
           {PLANS.map((plan) => {
             const isCurrent = currentPlan === plan.id;
             const isHighlight = plan.id === "STARTER";
@@ -173,6 +186,31 @@ export default async function BillingPage({
               </div>
             );
           })}
+
+          {/* Agency */}
+          <div className="rounded-xl border bg-background p-5 flex flex-col gap-4">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-semibold">{AGENCY_PLAN.name}</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-3xl font-bold">${AGENCY_PLAN.price}</span>
+                <span className="text-muted-foreground text-sm">/мес</span>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">{AGENCY_PLAN.reportsLimit} отчётов / мес</p>
+            </div>
+            <ul className="space-y-2 flex-1">
+              {AGENCY_PLAN.features.map((f) => (
+                <li key={f} className="flex items-start gap-2 text-sm">
+                  <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <div className="text-xs text-center text-muted-foreground py-2 border rounded-lg">
+              Скоро — напиши нам
+            </div>
+          </div>
         </div>
       </section>
 

@@ -14,7 +14,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <Header user={session.user} />
         <main className="flex-1 p-6">{children}</main>
         <footer className="border-t px-6 py-3 text-xs text-muted-foreground text-center">
-          © 2025 SEOBrief
+          © 2026 SEOBrief
         </footer>
       </div>
     </div>

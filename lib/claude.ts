@@ -211,7 +211,7 @@ function getMockBrief(targetUrl: string, competitors: SerpResult[]): { brief: SE
   return {
     brief: {
       targetKeyword: `seo services for ${domain}`,
-      recommendedTitle: `Best SEO Services 2025 | ${domain} — Top Ranked`,
+      recommendedTitle: `Best SEO Services 2026 | ${domain} — Top Ranked`,
       recommendedMetaDescription: `Discover the best SEO strategies for ${domain}. Expert analysis, competitor insights, and actionable recommendations for top rankings.`,
       recommendedH1: `Complete SEO Guide for ${domain}`,
       contentStructure: [
