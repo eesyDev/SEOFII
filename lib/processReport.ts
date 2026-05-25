@@ -49,7 +49,13 @@ export async function processReport(reportId: string) {
     });
     const isPro = user?.isAdmin || user?.plan === "STARTER" || user?.plan === "PRO";
 
-    const competitors = await fetchCompetitors(report.url, report.locationCode);
+    // Сначала скрапим целевую страницу чтобы взять title/H1 для поискового запроса
+    const { target: targetSnapshotPre } = await scrapePages(report.url, []);
+    const serpQuery = [targetSnapshotPre.h1, targetSnapshotPre.title]
+      .map((s) => s?.trim())
+      .find((s) => s && s.length > 3) ?? new URL(report.url).hostname;
+
+    const competitors = await fetchCompetitors(report.url, report.locationCode, serpQuery);
 
     await prisma.competitor.createMany({
       data: competitors.map((c) => ({
@@ -71,16 +77,19 @@ export async function processReport(reportId: string) {
     const fromGsc = gscRows.map((r) => r.query);
     const rawKeywords = [...new Set([...fromTitles, ...fromGsc])].slice(0, 30);
 
-    // Всё параллельно: keywords, domains, scraping, pagespeed
+    // Всё параллельно: keywords, domains, скрапинг конкурентов, pagespeed
+    // Таргет уже скрапнут выше (targetSnapshotPre), скрапим только конкурентов
+    const competitorUrls = topCompetitors.map((c) => c.url);
     const [
       [keywordData, domainInfo],
-      { target: targetSnapshot, competitors: compSnapshots },
+      compSnapshots,
       { target: targetSpeed, competitors: compSpeeds },
     ] = await Promise.all([
       Promise.all([fetchKeywords(rawKeywords), fetchDomainInfo(competitorDomains)]),
-      scrapePages(report.url, topCompetitors.map((c) => c.url)),
-      fetchPageSpeedsWithTimeout(report.url, topCompetitors.map((c) => c.url)),
+      scrapePages(report.url, competitorUrls).then((r) => r.competitors),
+      fetchPageSpeedsWithTimeout(report.url, competitorUrls),
     ]);
+    const targetSnapshot = targetSnapshotPre;
 
     if (keywordData.length > 0) {
       await prisma.keyword.createMany({

@@ -101,11 +101,13 @@ function getMockKeywords(keywords: string[]): KeywordData[] {
   }));
 }
 
-export async function fetchCompetitors(url: string, locationCode = 2840): Promise<SerpResult[]> {
+export async function fetchCompetitors(url: string, locationCode = 2840, searchQuery?: string): Promise<SerpResult[]> {
   if (USE_MOCK) return getMockCompetitors(url);
 
-  const targetUrl = new URL(url);
-  const searchQuery = targetUrl.hostname + " " + targetUrl.pathname.replace(/\//g, " ").trim();
+  if (!searchQuery) {
+    const targetUrl = new URL(url);
+    searchQuery = targetUrl.hostname + " " + targetUrl.pathname.replace(/\//g, " ").trim();
+  }
 
   // Язык определяем по локации
   const languageCode = LOCATION_LANGUAGE[locationCode] ?? "en";
@@ -124,7 +126,9 @@ export async function fetchCompetitors(url: string, locationCode = 2840): Promis
   });
 
   if (!response.ok) {
-    throw new Error(`DataForSEO SERP error: ${response.status}`);
+    let detail = "";
+    try { const body = await response.json(); detail = JSON.stringify(body).slice(0, 200); } catch {}
+    throw new Error(`DataForSEO SERP error: ${response.status}${detail ? " — " + detail : ""}`);
   }
 
   const data = await response.json();

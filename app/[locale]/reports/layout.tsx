@@ -9,11 +9,11 @@ export default async function ReportsLayout({ children }: { children: React.Reac
 
   return (
     <div className="flex min-h-screen bg-muted/30">
-      <AppSidebar />
+      <div className="no-print"><AppSidebar /></div>
       <div className="flex-1 flex flex-col min-w-0">
-        <Header user={session.user} />
+        <div className="no-print"><Header user={session.user} /></div>
         <main className="flex-1 p-6">{children}</main>
-        <footer className="border-t px-6 py-3 text-xs text-muted-foreground text-center">
+        <footer className="no-print border-t px-6 py-3 text-xs text-muted-foreground text-center">
           © 2026 SEOBrief
         </footer>
       </div>

@@ -130,6 +130,23 @@ export interface ClaudeResult {
 }
 
 // ─────────────────────────────────────────
+// ХЕЛПЕР: убирает markdown-обёртку перед JSON.parse
+// ─────────────────────────────────────────
+
+function stripJsonFences(text: string): string {
+  const t = text.trim();
+  // Ищем первый { или [ и последний } или ] — работает независимо от обёртки
+  const firstBrace = t.indexOf("{");
+  const firstBracket = t.indexOf("[");
+  if (firstBrace === -1 && firstBracket === -1) return t;
+  const isObj = firstBracket === -1 || (firstBrace !== -1 && firstBrace < firstBracket);
+  const start = isObj ? firstBrace : firstBracket;
+  const end = isObj ? t.lastIndexOf("}") : t.lastIndexOf("]");
+  if (end === -1 || end < start) return t;
+  return t.slice(start, end + 1);
+}
+
+// ─────────────────────────────────────────
 // МОК — возвращается когда нет API ключа
 // ─────────────────────────────────────────
 
@@ -504,7 +521,7 @@ contentGaps — массив из 4–6 объектов:
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 4000,
+    max_tokens: 8192,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -512,7 +529,7 @@ contentGaps — массив из 4–6 объектов:
 
   let brief: SEOBrief;
   try {
-    brief = JSON.parse(responseText);
+    brief = JSON.parse(stripJsonFences(responseText));
   } catch {
     throw new Error(`Claude вернул невалидный JSON: ${responseText.slice(0, 200)}`);
   }
@@ -591,7 +608,7 @@ ${compText}
 
       const text = message.content[0].type === "text" ? message.content[0].text : "";
       try {
-        return JSON.parse(text) as CompetitorComparison;
+        return JSON.parse(stripJsonFences(text)) as CompetitorComparison;
       } catch {
         return null;
       }
@@ -674,7 +691,7 @@ ${quickWins || "Данных нет"}
 
   const text = message.content[0].type === "text" ? message.content[0].text : "";
   try {
-    return JSON.parse(text) as QuickFix[];
+    return JSON.parse(stripJsonFences(text)) as QuickFix[];
   } catch {
     return [];
   }
@@ -851,7 +868,7 @@ ${allKnownBlocks.map((k) => `- ${k}: ${blockLabels[k]}`).join("\n")}
 
   const text = message.content[0].type === "text" ? message.content[0].text : "";
   try {
-    return JSON.parse(text) as BlockRow[];
+    return JSON.parse(stripJsonFences(text)) as BlockRow[];
   } catch {
     return [];
   }
@@ -938,7 +955,7 @@ URL: ${targetUrl}
 
   const text = message.content[0].type === "text" ? message.content[0].text : "";
   try {
-    return JSON.parse(text) as ReadyContent;
+    return JSON.parse(stripJsonFences(text)) as ReadyContent;
   } catch {
     return getMockReadyContent(targetUrl, brief);
   }

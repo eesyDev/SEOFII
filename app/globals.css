@@ -107,3 +107,27 @@ body {
   animation: gradient-text 4s ease infinite;
 }
 .animate-fade-up { animation: fade-up 0.6s ease forwards; }
+
+@media print {
+  * { box-shadow: none !important; }
+
+  body { background: white !important; color: black !important; }
+
+  .no-print { display: none !important; }
+
+  /* Убираем отступы main */
+  main { padding: 0 !important; }
+
+  /* Показываем все табы, не только активный */
+  [role="tabpanel"][data-state="inactive"] {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  /* Запрет разрыва карточек */
+  .break-inside-avoid { break-inside: avoid; }
+
+  /* Убираем hover-эффекты */
+  a { text-decoration: none !important; color: inherit !important; }
+}

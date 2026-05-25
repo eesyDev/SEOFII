@@ -44,13 +44,15 @@ export async function POST(req: NextRequest) {
   });
 
   if (process.env.TRIGGER_SECRET_KEY) {
-    // Async via Trigger.dev — отвечаем сразу, задача идёт в фоне
     const { tasks } = await import("@trigger.dev/sdk/v3");
     await tasks.trigger("generate-report", { reportId: report.id });
   } else {
-    // Fallback: синхронно (dev без Trigger.dev, мок-режим)
     const { processReport } = await import("@/lib/processReport");
-    await processReport(report.id);
+    try {
+      await processReport(report.id);
+    } catch {
+      // processReport уже сохранил статус FAILED в БД — просто редиректим на страницу отчёта
+    }
   }
 
   return NextResponse.json({ reportId: report.id });

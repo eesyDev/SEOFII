@@ -26,6 +26,7 @@ import { QuickFixesSection } from "@/components/report/quick-fixes";
 import { BlockMatrixSection } from "@/components/report/block-matrix";
 import { SpeedCard } from "@/components/report/speed-card";
 import { ReadyContentSection, ReadyContentLocked } from "@/components/report/ready-content";
+import { PrintButton } from "@/components/report/PrintButton";
 
 // ─────────────────────────────────────────
 // ТИПЫ
@@ -106,7 +107,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
       {/* Хедер */}
       <div className="flex items-start gap-3">
-        <Button variant="ghost" size="icon" asChild className="-ml-2 shrink-0">
+        <Button variant="ghost" size="icon" asChild className="no-print -ml-2 shrink-0">
           <Link href="/reports"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div className="flex-1 min-w-0">
@@ -117,14 +118,17 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
               {config.label}
             </Badge>
           </div>
-          <div className="flex items-center gap-2 flex-wrap mt-0.5">
-            <p className="text-xs text-muted-foreground">
-              {report.project?.name && `${report.project.name} · `}
-              {new Date(report.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
-              {report.costUsd && ` · $${Number(report.costUsd).toFixed(4)}`}
-              {hasGsc && <span className="ml-1">· GSC ✓</span>}
-            </p>
-            {siteType && <SiteTypeBadge siteType={siteType} />}
+          <div className="flex items-center justify-between gap-2 mt-0.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-xs text-muted-foreground">
+                {report.project?.name && `${report.project.name} · `}
+                {new Date(report.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
+                {report.costUsd && ` · $${Number(report.costUsd).toFixed(4)}`}
+                {hasGsc && <span className="ml-1">· GSC ✓</span>}
+              </p>
+              {siteType && <SiteTypeBadge siteType={siteType} />}
+            </div>
+            {report.status === "DONE" && result && <PrintButton />}
           </div>
         </div>
       </div>
@@ -161,7 +165,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
           {/* Табы */}
           <Tabs defaultValue="actions">
-            <TabsList className="w-full sm:w-auto flex overflow-x-auto">
+            <TabsList className="no-print w-full sm:w-auto flex overflow-x-auto">
               <TabsTrigger value="actions">Что делать</TabsTrigger>
               <TabsTrigger value="competitors">Конкуренты</TabsTrigger>
               <TabsTrigger value="brief">Бриф</TabsTrigger>
@@ -172,7 +176,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
             <TabsContent value="actions" className="space-y-4">
               {readyContent
                 ? <ReadyContentSection readyContent={readyContent} />
-                : <ReadyContentLocked />
+                : <div className="no-print"><ReadyContentLocked /></div>
               }
               {quickFixes.length > 0
                 ? <QuickFixesSection quickFixes={quickFixes} />
@@ -393,7 +397,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
                   {/* Апгрейд баннер — Free */}
                   {isFree && (
-                    <div className="relative rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-5 overflow-hidden">
+                    <div className="no-print relative rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-5 overflow-hidden">
                       <div className="absolute -right-6 -top-6 h-28 w-28 rounded-full bg-primary/10" />
                       <div className="relative flex items-start gap-4">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
