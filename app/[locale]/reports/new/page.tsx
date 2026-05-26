@@ -19,7 +19,7 @@ export default function NewReportPage() {
   const [gscFileName, setGscFileName] = useState("");
   const [gscError, setGscError] = useState("");
   const [showNoGscWarning, setShowNoGscWarning] = useState(false);
-  const [locationCode, setLocationCode] = useState(2643); // RU по умолчанию
+  const [locationCode, setLocationCode] = useState(2840); // US по умолчанию (DataForSEO не поддерживает RU)
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {

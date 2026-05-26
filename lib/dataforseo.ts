@@ -46,19 +46,18 @@ export interface DomainInfo {
 // LOCALES
 // ─────────────────────────────────────────
 
+// Только страны, которые DataForSEO SERP реально поддерживает
 export const LOCATIONS: Record<string, { code: number; label: string }> = {
-  RU: { code: 2643, label: "Россия" },
-  US: { code: 2840, label: "США" },
+  US: { code: 2840, label: "США (Google.com)" },
   UK: { code: 2826, label: "Великобритания" },
   DE: { code: 2276, label: "Германия" },
   FR: { code: 2250, label: "Франция" },
   KZ: { code: 2398, label: "Казахстан" },
   UA: { code: 2804, label: "Украина" },
-  BY: { code: 2112, label: "Беларусь" },
 };
 
 const LOCATION_LANGUAGE: Record<number, string> = {
-  2643: "ru", 2398: "ru", 2804: "ru", 2112: "ru",
+  2398: "ru", 2804: "ru",
   2840: "en", 2826: "en",
   2276: "de",
   2250: "fr",
@@ -132,18 +131,31 @@ export async function fetchCompetitors(url: string, locationCode = 2840, searchQ
   }
 
   const data = await response.json();
-  const items = data?.tasks?.[0]?.result?.[0]?.items ?? [];
+  const task = data?.tasks?.[0];
+  const taskStatus = task?.status_code;
+  const taskMessage = task?.status_message ?? "";
 
-  return items
-    .filter((item: any) => item.type === "organic")
-    .slice(0, 10)
-    .map((item: any, index: number) => ({
-      domain: new URL(item.url).hostname,
-      position: index + 1,
-      title: item.title ?? "",
-      url: item.url ?? "",
-      snippet: item.description ?? "",
-    }));
+  if (taskStatus && taskStatus !== 20000) {
+    if (taskStatus === 40204 || taskMessage.includes("Access denied") || taskMessage.includes("activate your subscription")) {
+      throw new Error("DataForSEO SERP API не активирован. Зайди в app.dataforseo.com → Plans and Subscriptions и включи SERP API.");
+    }
+    throw new Error(`DataForSEO SERP: ${taskStatus} — ${taskMessage}`);
+  }
+
+  const items = task?.result?.[0]?.items ?? [];
+  const organic = items.filter((item: any) => item.type === "organic").slice(0, 10);
+
+  if (organic.length === 0) {
+    throw new Error(`DataForSEO SERP вернул 0 результатов для запроса "${searchQuery}". Проверь что SERP API активирован в app.dataforseo.com.`);
+  }
+
+  return organic.map((item: any, index: number) => ({
+    domain: new URL(item.url).hostname,
+    position: index + 1,
+    title: item.title ?? "",
+    url: item.url ?? "",
+    snippet: item.description ?? "",
+  }));
 }
 
 // ─────────────────────────────────────────
