@@ -47,7 +47,7 @@ export interface DomainInfo {
 // ─────────────────────────────────────────
 
 // Домены-агрегаторы/медиа/соцсети — не являются реальными конкурентами в нише
-const NON_COMPETITOR_DOMAINS = new Set([
+export const AGGREGATOR_DOMAINS = new Set([
   // Соцсети
   "vk.com", "vkontakte.ru", "ok.ru", "instagram.com", "facebook.com",
   "twitter.com", "x.com", "youtube.com", "tiktok.com", "t.me", "telegram.org",
@@ -71,10 +71,19 @@ function isNonCompetitor(url: string, targetDomain: string): boolean {
   try {
     const domain = new URL(url).hostname.replace(/^www\./, "");
     if (domain === targetDomain) return true; // сам анализируемый сайт
-    if (NON_COMPETITOR_DOMAINS.has(domain)) return true;
+    if (AGGREGATOR_DOMAINS.has(domain)) return true;
     // рейтинговые сайты по паттернам
     if (/rating|reiting|рейтинг|лучш|top\d|топ\d/.test(domain)) return true;
     return false;
+  } catch {
+    return false;
+  }
+}
+
+export function isAggregatorDomain(url: string): boolean {
+  try {
+    const domain = new URL(url).hostname.replace(/^www\./, "");
+    return AGGREGATOR_DOMAINS.has(domain);
   } catch {
     return false;
   }
@@ -192,6 +201,68 @@ export async function fetchCompetitors(url: string, locationCode = 2840, searchQ
   if (competitors.length === 0) {
     throw new Error(`Не удалось найти реальных конкурентов в выдаче — все результаты оказались агрегаторами или соцсетями. Попробуй другой запрос.`);
   }
+
+  return competitors.map((item: any, index: number) => ({
+    domain: new URL(item.url).hostname,
+    position: index + 1,
+    title: item.title ?? "",
+    url: item.url ?? "",
+    snippet: item.description ?? "",
+  }));
+}
+
+// ─────────────────────────────────────────
+// SERP: топ-10 по запросу (без фильтрации целевого URL)
+// Используется в niche mining — нам не нужно исключать "сам себя"
+// ─────────────────────────────────────────
+
+export async function fetchSerpResults(query: string, locationCode = 2840): Promise<SerpResult[]> {
+  if (USE_MOCK) {
+    return Array.from({ length: 10 }, (_, i) => ({
+      domain: `competitor${i + 1}.com`,
+      position: i + 1,
+      title: `Result ${i + 1} for "${query}"`,
+      url: `https://competitor${i + 1}.com/page`,
+      snippet: `Mock snippet for query "${query}"`,
+    }));
+  }
+
+  const languageCode = LOCATION_LANGUAGE[locationCode] ?? "en";
+
+  const response = await fetch(`${BASE_URL}/serp/google/organic/live/advanced`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify([
+      {
+        keyword: query,
+        location_code: locationCode,
+        language_code: languageCode,
+        depth: 10,
+      },
+    ]),
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try { const body = await response.json(); detail = JSON.stringify(body).slice(0, 200); } catch {}
+    throw new Error(`DataForSEO SERP error: ${response.status}${detail ? " — " + detail : ""}`);
+  }
+
+  const data = await response.json();
+  const task = data?.tasks?.[0];
+  const taskStatus = task?.status_code;
+
+  if (taskStatus && taskStatus !== 20000) {
+    throw new Error(`DataForSEO SERP: ${taskStatus} — ${task?.status_message ?? ""}`);
+  }
+
+  const items = task?.result?.[0]?.items ?? [];
+  const organic = items.filter((item: any) => item.type === "organic");
+
+  // Фильтруем только агрегаторы, но не исключаем "сам себя"
+  const competitors = organic
+    .filter((item: any) => !isAggregatorDomain(item.url ?? ""))
+    .slice(0, 10);
 
   return competitors.map((item: any, index: number) => ({
     domain: new URL(item.url).hostname,

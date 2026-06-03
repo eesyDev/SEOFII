@@ -1,32 +1,13 @@
 import * as cheerio from "cheerio";
+import { isAggregatorDomain } from "./dataforseo";
 
 /**
  * Преобразует HTML страницы в очищенный Markdown для анализа Gemini.
  * Удаляет мусор (скрипты, стили, навигацию) и агрегаторные паттерны.
  */
 
-// Домены-агрегаторы, которые искажают паттерны ниши
-const AGGREGATOR_PATTERNS = [
-  "avito",
-  "yandex",
-  "youla",
-  "cian",
-  "irr",
-  "domclick",
-  "samokat",
-  "ozon",
-  "wildberries",
-  "aliexpress",
-  "market",
-];
-
 export function isAggregator(url: string): boolean {
-  try {
-    const domain = new URL(url).hostname.toLowerCase();
-    return AGGREGATOR_PATTERNS.some((p) => domain.includes(p));
-  } catch {
-    return false;
-  }
+  return isAggregatorDomain(url);
 }
 
 export interface CleanedPage {

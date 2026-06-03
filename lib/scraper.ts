@@ -22,6 +22,7 @@ export interface PageSnapshot {
   detectedBlocks: string[];  // эвристика: ["reviews", "faq", "video", ...]
   siteType: SiteType;
   fetchError?: string;
+  rawHtml?: string;          // очищенный HTML для downstream-анализа
 }
 
 type CheerioRoot = ReturnType<typeof cheerio.load>;
@@ -169,6 +170,9 @@ async function scrapePage(url: string): Promise<PageSnapshot> {
     // Удаляем шум перед подсчётом слов
     $("script, style, noscript, nav, footer, header, [aria-hidden='true']").remove();
 
+    // Сохраняем очищенный HTML для downstream-анализа (niche mining и т.д.)
+    const rawHtml = $.html();
+
     const bodyText = $("body").text().replace(/\s+/g, " ").trim();
     const wordCount = bodyText.split(" ").filter((w) => w.length > 1).length;
 
@@ -218,6 +222,7 @@ async function scrapePage(url: string): Promise<PageSnapshot> {
       imagesWithAlt,
       detectedBlocks,
       siteType,
+      rawHtml,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Неизвестная ошибка";

@@ -9,13 +9,15 @@
  */
 
 import { prisma } from "../lib/prisma";
-import { fetchCompetitors } from "../lib/dataforseo";
+import { fetchSerpResults, isAggregatorDomain } from "../lib/dataforseo";
 import { scrapePages } from "../lib/scraper";
-import { htmlToMiningMarkdown, isAggregator } from "../lib/markdownClean";
+import { htmlToMiningMarkdown } from "../lib/markdownClean";
 import { minePatternsFromNiche, savePatternsToDb } from "../lib/nicheMining";
 import type { CleanedPage } from "../lib/markdownClean";
 
-const LOCATION_CODE = 2840; // Россия по умолчанию, можно сделать флаг
+// По умолчанию Казахстан (русскоязычная выдача).
+// Для других стран передай 3-м аргументом: US, UK, KZ, UA, DE, FR
+const DEFAULT_LOCATION = 2398;
 
 async function main() {
   const args = process.argv.slice(2);
@@ -44,10 +46,9 @@ async function main() {
   for (const query of seedQueries) {
     console.log(`🔍 SERP для: "${query}"`);
     try {
-      // Передаём фиктивный URL, так как fetchCompetitors требует его для фильтрации
-      const competitors = await fetchCompetitors("https://example.com", LOCATION_CODE, query);
+      const competitors = await fetchSerpResults(query, DEFAULT_LOCATION);
       for (const c of competitors) {
-        if (!isAggregator(c.url)) {
+        if (!isAggregatorDomain(c.url)) {
           allUrls.add(c.url);
           urlToQuery.set(c.url, query);
         }
@@ -66,41 +67,33 @@ async function main() {
     process.exit(1);
   }
 
-  // 2. Скрапим страницы
+  // 2. Скрапим страницы (один fetch — HTML сохраняется в snapshot.rawHtml)
   console.log("\n🕷️ Скрапим страницы...");
   const { competitors: snapshots } = await scrapePages("https://example.com", uniqueUrls);
 
-  const successfulSnapshots = snapshots.filter((s) => !s.fetchError);
-  const failedSnapshots = snapshots.filter((s) => s.fetchError);
+  const successfulSnapshots = snapshots.filter((s) => !s.fetchError && s.rawHtml);
+  const failedSnapshots = snapshots.filter((s) => s.fetchError || !s.rawHtml);
 
   console.log(`   ✅ Успешно: ${successfulSnapshots.length}`);
   console.log(`   ❌ Ошибки: ${failedSnapshots.length}`);
 
   if (failedSnapshots.length > 0) {
     for (const s of failedSnapshots.slice(0, 3)) {
-      console.log(`      - ${s.url}: ${s.fetchError}`);
+      console.log(`      - ${s.url}: ${s.fetchError ?? "no HTML"}`);
     }
   }
 
-  // 3. Конвертируем в Markdown
+  // 3. Конвертируем в Markdown (используем уже скачанный HTML)
   console.log("\n🧹 Очищаем HTML → Markdown...");
   const cleanedPages: CleanedPage[] = [];
 
   for (const snap of successfulSnapshots) {
+    if (!snap.rawHtml) continue;
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch(snap.url, {
-        headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", Accept: "text/html" },
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timer));
-
-      if (!res.ok) continue;
-      const html = await res.text();
-      const cleaned = htmlToMiningMarkdown(html, snap.url);
+      const cleaned = htmlToMiningMarkdown(snap.rawHtml, snap.url);
       cleanedPages.push(cleaned);
     } catch {
-      // игнорируем ошибки повторной загрузки
+      // игнорируем ошибки парсинга отдельных страниц
     }
   }
 
