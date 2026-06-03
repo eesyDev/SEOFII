@@ -7,6 +7,23 @@ const MINING_API_KEY = process.env.GEMINI_MINING_API_KEY ?? process.env.GEMINI_A
 
 const USE_MOCK = !MINING_API_KEY;
 
+// Строго фиксированные ID блоков — никакого хаоса в БД
+const CORE_BLOCK_NAMES = [
+  "calculator",
+  "portfolio_gallery",
+  "reviews_testimonials",
+  "price_table",
+  "cta_form",
+  "trust_badges",
+  "team_profiles",
+  "faq_section",
+  "video_block",
+  "comparison_table",
+  "social_proof_counter",
+  "lead_magnet",
+  "other_specialized_block",
+];
+
 interface MiningResult {
   niche: string;
   analyzedDomains: string[];
@@ -18,12 +35,8 @@ interface MiningResult {
     rationale: string;
     blockType: "conversion" | "trust" | "content" | "technical" | "navigation";
   }>;
-  rejected: string[];
 }
 
-/**
- * Берём уже одобренные паттерны из базы как few-shot примеры
- */
 async function getApprovedExamples(niche: string, limit = 8): Promise<string> {
   const patterns = await prisma.nichePattern.findMany({
     where: { confidence: "approved" },
@@ -34,9 +47,9 @@ async function getApprovedExamples(niche: string, limit = 8): Promise<string> {
   if (patterns.length === 0) return "";
 
   return `
-Примеры уже подтверждённых паттернов из других ниш (используй как ориентир качества):
+Примеры уже подтверждённых паттернов из других ниш (ориентир качества):
 ${patterns
-  .map((p) => `- ${p.pattern} (${p.patternType}, freq: ${p.frequency}): ${p.context ?? ""}`)
+  .map((p) => `- ${p.pattern} (${p.patternType}): ${p.context ?? ""}`)
   .join("\n")}`;
 }
 
@@ -50,45 +63,54 @@ function buildPrompt(niche: string, pages: CleanedPage[], examples: string): str
     )
     .join("\n\n---\n\n");
 
-  return `Ты — SEO-аналитик, специализирующийся на изучении паттернов успешных сайтов.
+  return `Ты — эксперт по коммерческим факторам ранжирования сайтов и SEO-аналитик.
 
-ЗАДАЧА: Проанализируй структуру страниц из нише "${niche}" и выяви повторяющиеся контентные/конверсионные блоки.
+ЗАДАЧА: Проанализируй Markdown-структуру страниц сайтов в нише "${niche}". Зафиксируй наличие ключевых коммерческих, контентных и конверсионных блоков на каждом домене.
 
-ЖЁСТКИЕ ПРАВИЛА:
-1. Анализируй ТОЛЬКО коммерческие и контентные блоки (калькуляторы, формы, галереи, FAQ, отзывы, таблицы, видео, кейсы, портфолио)
-2. ИГНОРИРУЙ полностью: cookie-баннеры, футеры, хедеры, навигацию, корзины, логины, регистрацию, социальные сети, подписки на рассылку
-3. ИГНОРИРУЙ агрегаторы: если видишь "Объявления", "Список исполнителей", "Фильтры по 100 параметрам" — это маркетплейс, не считай
-4. Частота = (сайтов с блоком) / (всего проанализировано). Округляй до 2 знаков
-5. Минимальный порог для включения: frequency >= 0.3 (3+ сайта из 10)
-6. Если блок есть у 1-2 сайтов — это шум, не включай
-7. Давай конкретные machine-friendly ID: cost_calculator, before_after_gallery, faq_schema, client_logos, video_testimonial
-8. blockType: conversion (увеличивает продажи), trust (доверие), content (информация), technical (разметка), navigation (структура)
-${examples}
+ПРАВИЛА АНАЛИЗА:
+1. Игнорируй элементы сквозной навигации: шапку (header), подвал (footer), меню, cookie-баннеры, виджеты соцсетей.
+2. Не придумывай новые типы блоков в поле 'name', если они подходят под категории из списка. Используй 'other_specialized_block' только для уникальных нишевых фич.
+3. В массив 'evidence' добавляй домен сайта ТОЛЬКО если ты на 100% уверен, что данный блок присутствует на его страницах.
+4. Минимальный порог: блок должен быть как минимум на 30% проанализированных сайтов, иначе это шум.${examples}
+
+ДОСТУПНЫЕ ТИПЫ БЛОКОВ (выбирай строго из списка):
+- calculator: калькуляторы стоимости, расчёты
+- portfolio_gallery: фото работ, до/после, кейсы
+- reviews_testimonials: отзывы, рейтинги, видео-отзывы
+- price_table: таблицы цен, прайс-листы
+- cta_form: формы заявки, обратной связи, захвата лидов
+- trust_badges: логотипы партнёров, сертификаты, награды
+- team_profiles: страницы команды, фото экспертов
+- faq_section: FAQ, аккордеоны с вопросами-ответами
+- video_block: видео-обзоры, презентации
+- comparison_table: сравнительные таблицы (товаров, услуг)
+- social_proof_counter: счётчики клиентов, заказов
+- lead_magnet: бесплатные материалы, чек-листы, гайды
+- other_specialized_block: уникальный блок, не подходящий под категории выше
 
 АНАЛИЗИРУЕМЫЕ СТРАНИЦЫ:
-${pagesBlock}
-
-Отвечай СТРОГО в формате JSON по предоставленной схеме. Без markdown-обёртки, без пояснений.`;
+${pagesBlock}`;
 }
 
 function getMockResult(niche: string, pages: CleanedPage[]): MiningResult {
   const domains = pages.map((p) => p.domain);
+  const total = domains.length || 1;
   return {
     niche,
     analyzedDomains: domains,
     patterns: [
       {
-        name: "cost_calculator",
+        name: "calculator",
         label: "Калькулятор стоимости",
-        frequency: 0.6,
+        frequency: Math.round((2 / total) * 100) / 100,
         evidence: domains.slice(0, 2),
         rationale: "Позволяет пользователю мгновенно оценить бюджет без звонка менеджеру",
         blockType: "conversion",
       },
       {
-        name: "before_after_gallery",
+        name: "portfolio_gallery",
         label: "Галерея до/после",
-        frequency: 0.5,
+        frequency: Math.round((2 / total) * 100) / 100,
         evidence: domains.slice(0, 2),
         rationale: "Визуальное доказательство качества работы, повышает доверие",
         blockType: "trust",
@@ -96,18 +118,18 @@ function getMockResult(niche: string, pages: CleanedPage[]): MiningResult {
       {
         name: "faq_section",
         label: "FAQ с schema.org",
-        frequency: 0.7,
+        frequency: Math.round((3 / total) * 100) / 100,
         evidence: domains.slice(0, 3),
         rationale: "Попадание в блок People Also Ask Google, снижение нагрузки на менеджеров",
         blockType: "content",
       },
-    ],
-    rejected: ["cookie_banner", "footer_links", "social_share"],
+    ].filter((p) => p.frequency >= 0.3),
   };
 }
 
 /**
- * Добыча паттернов ниши через Gemini Flash (Tier-2)
+ * Добыча паттернов ниши через Gemini Flash (Tier-2).
+ * Frequency считается на бэкенде — LLM только находит факты.
  */
 export async function minePatternsFromNiche(
   niche: string,
@@ -127,6 +149,7 @@ export async function minePatternsFromNiche(
     model: MINING_MODEL,
     contents: prompt,
     config: {
+      temperature: 0.1, // минимум креативности, максимум точности
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -138,33 +161,59 @@ export async function minePatternsFromNiche(
             items: {
               type: Type.OBJECT,
               properties: {
-                name: { type: Type.STRING },
+                name: {
+                  type: Type.STRING,
+                  enum: CORE_BLOCK_NAMES,
+                  description: "Строго из списка core blocks",
+                },
                 label: { type: Type.STRING },
-                frequency: { type: Type.NUMBER },
-                evidence: { type: Type.ARRAY, items: { type: Type.STRING } },
+                evidence: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: "Домены, где найден блок (только уверенные совпадения)",
+                },
                 rationale: { type: Type.STRING },
                 blockType: {
                   type: Type.STRING,
                   enum: ["conversion", "trust", "content", "technical", "navigation"],
                 },
               },
-              required: ["name", "label", "frequency", "evidence", "rationale", "blockType"],
+              required: ["name", "label", "evidence", "rationale", "blockType"],
             },
           },
-          rejected: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
-        required: ["niche", "analyzedDomains", "patterns", "rejected"],
+        required: ["niche", "analyzedDomains", "patterns"],
       },
     },
   });
 
-  const text = result.text ?? "{}";
-  const parsed = JSON.parse(text) as MiningResult;
+  const rawData = JSON.parse(result.text ?? "{}") as {
+    niche: string;
+    analyzedDomains: string[];
+    patterns: Array<{
+      name: string;
+      label: string;
+      evidence: string[];
+      rationale: string;
+      blockType: "conversion" | "trust" | "content" | "technical" | "navigation";
+    }>;
+  };
 
-  // Фильтруем минимальный порог
-  parsed.patterns = parsed.patterns.filter((p) => p.frequency >= 0.3);
+  const totalSites = rawData.analyzedDomains.length || 1;
 
-  return parsed;
+  // Frequency считаем на бэкенде — LLM не умеет в математику
+  const patterns = rawData.patterns
+    .map((p) => ({
+      ...p,
+      frequency: Number((p.evidence.length / totalSites).toFixed(2)),
+    }))
+    .filter((p) => p.frequency >= 0.3); // фильтр шума на бэкенде
+
+  return {
+    niche: rawData.niche,
+    analyzedDomains: rawData.analyzedDomains,
+    patterns,
+  };
 }
 
 /**
