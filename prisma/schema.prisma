@@ -166,3 +166,19 @@ enum ReportStatus {
   DONE
   FAILED
 }
+
+model NichePattern {
+  id          String   @id @default(cuid())
+  niche       String
+  pattern     String
+  patternType String   @default("block")
+  frequency   Float
+  evidence    String[]
+  confidence  String   @default("pending")
+  context     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([niche, confidence, frequency])
+  @@map("niche_patterns")
+}
