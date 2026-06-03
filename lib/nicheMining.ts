@@ -124,6 +124,7 @@ function getMockResult(niche: string, pages: CleanedPage[]): MiningResult {
         blockType: "content",
       },
     ].filter((p) => p.frequency >= 0.3),
+    rejected: ["cookie_banner", "footer_links", "social_share"],
   };
 }
 

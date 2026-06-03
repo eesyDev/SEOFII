@@ -8,9 +8,6 @@
  *   npx tsx scripts/mineNiche.ts construction_repair "ремонт квартир москва" "отделка квартир под ключ"
  */
 
-import { config } from "dotenv";
-config({ path: [".env.local", ".env"] });
-
 import { prisma } from "../lib/prisma";
 import { fetchSerpResults, isAggregatorDomain } from "../lib/dataforseo";
 import { scrapePages } from "../lib/scraper";
