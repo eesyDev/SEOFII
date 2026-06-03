@@ -2,7 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { prisma } from "./prisma";
 import type { CleanedPage } from "./markdownClean";
 
-const MINING_MODEL = process.env.GEMINI_MINING_MODEL ?? "gemini-2.0-flash";
+const MINING_MODEL = process.env.GEMINI_MINING_MODEL ?? "gemini-2.5-flash";
 const MINING_API_KEY = process.env.GEMINI_MINING_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
 
 const USE_MOCK = !MINING_API_KEY;
