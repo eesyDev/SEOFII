@@ -231,6 +231,13 @@ async function scrapePage(url: string): Promise<PageSnapshot> {
 }
 
 function getMockSnapshot(url: string, isTarget = false): PageSnapshot {
+  const mockHtml = `<html><head><title>Mock</title></head><body>
+    <h1>Mock page</h1><p>This is mock content for testing niche mining pipeline.</p>
+    <section class="reviews"><h2>Отзывы</h2><p>Отличный сервис!</p></section>
+    <section class="faq"><h2>FAQ</h2><p>Часто задаваемые вопросы</p></section>
+    <section class="calculator"><h2>Калькулятор</h2><button>Рассчитать</button></section>
+  </body></html>`;
+
   if (isTarget) {
     return {
       url,
@@ -246,6 +253,7 @@ function getMockSnapshot(url: string, isTarget = false): PageSnapshot {
       imagesWithAlt: 3,
       detectedBlocks: ["price", "form"],
       siteType: "ecommerce",
+      rawHtml: mockHtml,
     };
   }
   const pos = parseInt(new URL(url).hostname.replace("competitor", "")) || 1;
@@ -273,6 +281,7 @@ function getMockSnapshot(url: string, isTarget = false): PageSnapshot {
     imagesWithAlt: 18 + pos * 4,
     detectedBlocks: competitorBlocks,
     siteType: "ecommerce",
+    rawHtml: mockHtml,
   };
 }
 
