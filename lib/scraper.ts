@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 
-const USE_MOCK = !process.env.ANTHROPIC_API_KEY;
+const USE_MOCK = process.env.SCRAPER_MOCK === "true" || (!process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY);
 
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
