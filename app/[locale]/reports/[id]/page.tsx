@@ -27,6 +27,10 @@ import { BlockMatrixSection } from "@/components/report/block-matrix";
 import { SpeedCard } from "@/components/report/speed-card";
 import { ReadyContentSection, ReadyContentLocked } from "@/components/report/ready-content";
 import { PrintButton } from "@/components/report/PrintButton";
+import { SchemaSection } from "@/components/report/schema-section";
+import { PageStructureSection } from "@/components/report/page-structure";
+import type { SchemaResult } from "@/lib/claude";
+import type { PageStructureAnalysis } from "@/lib/gemini";
 
 // ─────────────────────────────────────────
 // ТИПЫ
@@ -43,6 +47,8 @@ interface ReportResult {
   pageSpeed?: Record<string, PageSpeedData>;
   siteType?: SiteType;
   readyContent?: import("@/lib/claude").ReadyContent | null;
+  schemaResult?: SchemaResult | null;
+  pageStructure?: PageStructureAnalysis | null;
 }
 
 const STATUS_CONFIG = {
@@ -96,6 +102,8 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const pageSpeed    = result?.pageSpeed ?? {};
   const siteType     = result?.siteType ?? null;
   const readyContent = result?.readyContent ?? null;
+  const schemaResult = result?.schemaResult as SchemaResult | null ?? null;
+  const pageStructure = result?.pageStructure as PageStructureAnalysis | null ?? null;
   const gscRows     = (report.gscData as GscRow[] | null) ?? [];
   const hasGsc      = gscRows.length > 0;
   const isFree      = !user?.isAdmin && (!user || user.plan === "FREE");
@@ -168,7 +176,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
             <TabsList className="no-print w-full sm:w-auto flex overflow-x-auto">
               <TabsTrigger value="actions">Что делать</TabsTrigger>
               <TabsTrigger value="competitors">Конкуренты</TabsTrigger>
-              <TabsTrigger value="brief">Бриф</TabsTrigger>
+              <TabsTrigger value="brief">SEO ТЗ</TabsTrigger>
               <TabsTrigger value="keywords">Ключевые слова</TabsTrigger>
             </TabsList>
 
@@ -176,7 +184,9 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
             <TabsContent value="actions" className="space-y-4">
               {readyContent
                 ? <ReadyContentSection readyContent={readyContent} />
-                : <div className="no-print"><ReadyContentLocked /></div>
+                : isFree
+                  ? <div className="no-print"><ReadyContentLocked /></div>
+                  : null
               }
               {quickFixes.length > 0
                 ? <QuickFixesSection quickFixes={quickFixes} />
@@ -188,6 +198,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
                   competitorDomains={report.competitors.slice(0, comparisons.length).map((c) => c.domain)}
                 />
               )}
+              {pageStructure && <PageStructureSection pageStructure={pageStructure} />}
             </TabsContent>
 
             {/* ── ТАБ 2: КОНКУРЕНТЫ ── */}
@@ -365,6 +376,9 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
                       </CardContent>
                     </Card>
                   )}
+
+                  {/* Schema.org */}
+                  {schemaResult && <SchemaSection schemaResult={schemaResult} />}
 
                   {/* Линкбилдинг */}
                   {brief.linkBuildingStrategy && (

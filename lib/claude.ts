@@ -399,7 +399,8 @@ export async function generateSEOBrief(
   domainInfo: DomainInfo[] = [],
   analytics?: AnalyticsResult,
   gscRows: GscRow[] = [],
-  siteType: SiteType = "content"
+  siteType: SiteType = "content",
+  targetSnapshot?: PageSnapshot
 ): Promise<{ brief: SEOBrief; costUsd: number }> {
   if (USE_MOCK) return getMockBrief(targetUrl, competitors);
 
@@ -456,12 +457,34 @@ ${gapList || "нет данных"}
 `;
   }
 
+  let targetPageBlock = "";
+  if (targetSnapshot && !targetSnapshot.fetchError) {
+    const blocks = targetSnapshot.detectedBlocks.length > 0
+      ? targetSnapshot.detectedBlocks.join(", ")
+      : "не обнаружено";
+    const headings = targetSnapshot.headings.length > 0
+      ? targetSnapshot.headings.map((h) => `  - ${h}`).join("\n")
+      : "  нет данных";
+    targetPageBlock = `
+ЧТО УЖЕ ЕСТЬ НА АНАЛИЗИРУЕМОЙ СТРАНИЦЕ (результат скрапинга):
+- Title: ${targetSnapshot.title || "н/д"}
+- H1: ${targetSnapshot.h1 || "н/д"}
+- Кол-во слов: ${targetSnapshot.wordCount}
+- Разделы (H2/H3):
+${headings}
+- Обнаруженные блоки: ${blocks}
+- Schema.org: ${targetSnapshot.schemaTypes.length > 0 ? targetSnapshot.schemaTypes.join(", ") : "нет"}
+
+ВАЖНО: при формировании contentGaps НЕ рекомендуй создавать страницы или блоки, которые уже есть на сайте согласно данным выше.
+`;
+  }
+
   const prompt = `Ты — опытный SEO-специалист. На основе анализа конкурентов создай детальное ТЗ для копирайтера.
 
 АНАЛИЗИРУЕМАЯ СТРАНИЦА: ${targetUrl}
 
 ${SITE_TYPE_CONTEXT[siteType]}
-
+${targetPageBlock}
 ТОП-10 КОНКУРЕНТОВ В ВЫДАЧЕ (с заголовками и сниппетами из поиска):
 ${competitorList}
 
@@ -521,11 +544,15 @@ contentGaps — массив из 4–6 объектов:
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 8192,
+    max_tokens: 12000,
     messages: [{ role: "user", content: prompt }],
   });
 
   const responseText = message.content[0].type === "text" ? message.content[0].text : "";
+
+  if (message.stop_reason === "max_tokens") {
+    throw new Error(`Claude не успел дописать JSON (превышен лимит токенов). Попробуй ещё раз.`);
+  }
 
   let brief: SEOBrief;
   try {
@@ -601,7 +628,7 @@ ${compText}
 }`;
 
       const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 1200,
         messages: [{ role: "user", content: prompt }],
       });
@@ -684,7 +711,7 @@ ${quickWins || "Данных нет"}
 ]`;
 
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 1500,
     messages: [{ role: "user", content: prompt }],
   });
@@ -861,7 +888,7 @@ ${allKnownBlocks.map((k) => `- ${k}: ${blockLabels[k]}`).join("\n")}
 ]`;
 
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 2000,
     messages: [{ role: "user", content: prompt }],
   });
@@ -948,7 +975,7 @@ URL: ${targetUrl}
 }`;
 
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 2500,
     messages: [{ role: "user", content: prompt }],
   });
@@ -958,5 +985,107 @@ URL: ${targetUrl}
     return JSON.parse(stripJsonFences(text)) as ReadyContent;
   } catch {
     return getMockReadyContent(targetUrl, brief);
+  }
+}
+
+// ─────────────────────────────────────────
+// SCHEMA.ORG: генерация JSON-LD разметки
+// ─────────────────────────────────────────
+
+export interface SchemaResult {
+  schemas: SchemaBlock[];
+}
+
+export interface SchemaBlock {
+  type: string;
+  description: string;
+  code: string;
+}
+
+function getMockSchemaResult(url: string, siteType: SiteType): SchemaResult {
+  const domain = new URL(url).hostname;
+  return {
+    schemas: [
+      {
+        type: "LocalBusiness",
+        description: "Основная разметка организации — появляется в Картах и Knowledge Panel",
+        code: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "LocalBusiness",
+          "name": domain,
+          "url": url,
+          "telephone": "+7 (000) 000-00-00",
+          "address": { "@type": "PostalAddress", "addressLocality": "Москва", "addressCountry": "RU" },
+        }, null, 2),
+      },
+      {
+        type: "FAQPage",
+        description: "Расширенные сниппеты с ответами прямо в выдаче",
+        code: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          "mainEntity": [{ "@type": "Question", "name": "Пример вопроса?", "acceptedAnswer": { "@type": "Answer", "text": "Пример ответа." } }],
+        }, null, 2),
+      },
+    ],
+  };
+}
+
+export async function generateSchemaMarkup(
+  url: string,
+  brief: SEOBrief,
+  siteType: SiteType,
+  detectedBlocks: string[] = [],
+  existingSchemas: string[] = []
+): Promise<SchemaResult> {
+  if (USE_MOCK) return getMockSchemaResult(url, siteType);
+
+  const siteTypeLabel =
+    siteType === "ecommerce" ? "Интернет-магазин" :
+    siteType === "local"     ? "Локальный бизнес / сервисная компания" :
+                               "Информационный / контентный сайт";
+
+  const blocksInfo = detectedBlocks.length > 0
+    ? `Обнаруженные блоки на странице: ${detectedBlocks.join(", ")}`
+    : "Блоки не определены";
+
+  const existingInfo = existingSchemas.length > 0
+    ? `Уже есть schema.org: ${existingSchemas.join(", ")} — не дублируй их.`
+    : "Schema.org на странице отсутствует.";
+
+  const prompt = `Ты — технический SEO-специалист. Сгенерируй валидные schema.org JSON-LD разметки для страницы.
+
+URL: ${url}
+Тип сайта: ${siteTypeLabel}
+Основной ключ: ${brief.targetKeyword}
+Title: ${brief.recommendedTitle}
+${blocksInfo}
+${existingInfo}
+
+Задача: подобрать 2–3 типа schema.org которые дадут наибольший SEO-эффект для этого сайта.
+Заполни реальными данными на основе URL и типа бизнеса. Если данных нет — используй плейсхолдеры [ЗАПОЛНИТЬ: описание].
+
+Отвечай ТОЛЬКО JSON:
+{
+  "schemas": [
+    {
+      "type": "Тип схемы",
+      "description": "Зачем эта схема и что даёт в выдаче (1 предложение)",
+      "code": "...валидный JSON-LD как строка..."
+    }
+  ]
+}`;
+
+  const message = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 3000,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = message.content[0].type === "text" ? message.content[0].text : "";
+  try {
+    return JSON.parse(stripJsonFences(text)) as SchemaResult;
+  } catch {
+    return getMockSchemaResult(url, siteType);
   }
 }

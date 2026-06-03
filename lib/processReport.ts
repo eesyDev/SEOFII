@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { fetchCompetitors, fetchKeywords, fetchDomainInfo } from "@/lib/dataforseo";
 import { generateSEOBrief, generateComparisons, generateBlockMatrix, generateQuickFixes, generateReadyContent } from "@/lib/claude";
+import type { SchemaResult } from "@/lib/claude";
+import { generateSchemaWithGemini, analyzePageWithGemini } from "@/lib/gemini";
+import type { PageStructureAnalysis } from "@/lib/gemini";
 import { computeAnalytics } from "@/lib/analytics";
 import { scrapePages } from "@/lib/scraper";
 import { fetchPageSpeeds } from "@/lib/pagespeed";
@@ -85,7 +88,7 @@ export async function processReport(reportId: string) {
       compSnapshots,
       { target: targetSpeed, competitors: compSpeeds },
     ] = await Promise.all([
-      Promise.all([fetchKeywords(rawKeywords), fetchDomainInfo(competitorDomains)]),
+      Promise.all([fetchKeywords(rawKeywords, report.locationCode), fetchDomainInfo(competitorDomains)]),
       scrapePages(report.url, competitorUrls).then((r) => r.competitors),
       fetchPageSpeedsWithTimeout(report.url, competitorUrls),
     ]);
@@ -112,7 +115,7 @@ export async function processReport(reportId: string) {
       { brief, costUsd: briefCost },
       [comparisons, blockMatrix],
     ] = await Promise.all([
-      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType),
+      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType, targetSnapshot),
       Promise.all([
         generateComparisons(targetSnapshot, compSnapshots, topCompetitors),
         generateBlockMatrix(targetSnapshot, compSnapshots, topCompetitors, siteType),
@@ -123,10 +126,16 @@ export async function processReport(reportId: string) {
       domainInfo.map((d) => [d.domain, { domainAge: d.domainAge, referringDomains: d.referringDomains }])
     );
 
-    const quickFixes = await generateQuickFixes(report.url, brief, comparisons, analytics, siteType);
-    const readyContent = isPro
-      ? await generateReadyContent(report.url, brief, siteType)
-      : null;
+    const [quickFixes, schemaResult, pageStructure, readyContent] = await Promise.all([
+      generateQuickFixes(report.url, brief, comparisons, analytics, siteType),
+      generateSchemaWithGemini(
+        report.url, brief, siteType,
+        targetSnapshot.detectedBlocks,
+        targetSnapshot.schemaTypes
+      ),
+      analyzePageWithGemini(report.url, competitorDomains),
+      isPro ? generateReadyContent(report.url, brief, siteType) : Promise.resolve(null),
+    ]);
 
     const compCost = comparisons.length * 0.015;
     const costUsd = briefCost + compCost + 0.01;
@@ -142,6 +151,8 @@ export async function processReport(reportId: string) {
       comparisons,
       blockMatrix,
       quickFixes,
+      schemaResult,
+      pageStructure,
       readyContent,
       competitors,
       pageSpeed,

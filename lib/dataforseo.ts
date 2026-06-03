@@ -46,13 +46,47 @@ export interface DomainInfo {
 // LOCALES
 // ─────────────────────────────────────────
 
+// Домены-агрегаторы/медиа/соцсети — не являются реальными конкурентами в нише
+const NON_COMPETITOR_DOMAINS = new Set([
+  // Соцсети
+  "vk.com", "vkontakte.ru", "ok.ru", "instagram.com", "facebook.com",
+  "twitter.com", "x.com", "youtube.com", "tiktok.com", "t.me", "telegram.org",
+  "zen.yandex.ru", "dzen.ru",
+  // Медиа / блоги
+  "vc.ru", "dtf.ru", "habr.com", "sostav.ru", "rb.ru", "forbes.ru",
+  "rbc.ru", "kommersant.ru", "vedomosti.ru", "incrussia.ru", "tadviser.ru",
+  "pikabu.ru", "livejournal.com", "medium.com",
+  // Рейтинги / агрегаторы отзывов
+  "zoon.ru", "flamp.ru", "yell.ru", "otzovik.com", "irecommend.ru",
+  "tripadvisor.com", "sravni.ru", "banki.ru", "ratingfirmporemontu.ru",
+  // Поиск / карты / справочники
+  "google.com", "yandex.ru", "2gis.ru", "yandex.ru",
+  // Маркетплейсы / доски
+  "ozon.ru", "wildberries.ru", "avito.ru", "youla.ru", "cian.ru", "domclick.ru",
+  // Энциклопедии
+  "wikipedia.org", "ru.wikipedia.org", "wikihow.com",
+]);
+
+function isNonCompetitor(url: string, targetDomain: string): boolean {
+  try {
+    const domain = new URL(url).hostname.replace(/^www\./, "");
+    if (domain === targetDomain) return true; // сам анализируемый сайт
+    if (NON_COMPETITOR_DOMAINS.has(domain)) return true;
+    // рейтинговые сайты по паттернам
+    if (/rating|reiting|рейтинг|лучш|top\d|топ\d/.test(domain)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // Только страны, которые DataForSEO SERP реально поддерживает
 export const LOCATIONS: Record<string, { code: number; label: string }> = {
   US: { code: 2840, label: "США (Google.com)" },
   UK: { code: 2826, label: "Великобритания" },
   DE: { code: 2276, label: "Германия" },
   FR: { code: 2250, label: "Франция" },
-  KZ: { code: 2398, label: "Казахстан" },
+  KZ: { code: 2398, label: "Казахстан (Русский язык)" },
   UA: { code: 2804, label: "Украина" },
 };
 
@@ -143,13 +177,23 @@ export async function fetchCompetitors(url: string, locationCode = 2840, searchQ
   }
 
   const items = task?.result?.[0]?.items ?? [];
-  const organic = items.filter((item: any) => item.type === "organic").slice(0, 10);
+  const organic = items.filter((item: any) => item.type === "organic");
 
   if (organic.length === 0) {
     throw new Error(`DataForSEO SERP вернул 0 результатов для запроса "${searchQuery}". Проверь что SERP API активирован в app.dataforseo.com.`);
   }
 
-  return organic.map((item: any, index: number) => ({
+  const targetDomain = new URL(url).hostname.replace(/^www\./, "");
+
+  const competitors = organic
+    .filter((item: any) => !isNonCompetitor(item.url ?? "", targetDomain))
+    .slice(0, 10);
+
+  if (competitors.length === 0) {
+    throw new Error(`Не удалось найти реальных конкурентов в выдаче — все результаты оказались агрегаторами или соцсетями. Попробуй другой запрос.`);
+  }
+
+  return competitors.map((item: any, index: number) => ({
     domain: new URL(item.url).hostname,
     position: index + 1,
     title: item.title ?? "",
@@ -162,9 +206,11 @@ export async function fetchCompetitors(url: string, locationCode = 2840, searchQ
 // KEYWORDS: данные по ключевым словам
 // ─────────────────────────────────────────
 
-export async function fetchKeywords(keywords: string[]): Promise<KeywordData[]> {
+export async function fetchKeywords(keywords: string[], locationCode = 2840): Promise<KeywordData[]> {
   if (keywords.length === 0) return [];
   if (USE_MOCK) return getMockKeywords(keywords);
+
+  const languageCode = LOCATION_LANGUAGE[locationCode] ?? "en";
 
   const response = await fetch(`${BASE_URL}/keywords_data/google_ads/search_volume/live`, {
     method: "POST",
@@ -172,8 +218,8 @@ export async function fetchKeywords(keywords: string[]): Promise<KeywordData[]> 
     body: JSON.stringify([
       {
         keywords,
-        location_code: 2840,
-        language_code: "en",
+        location_code: locationCode,
+        language_code: languageCode,
       },
     ]),
   });

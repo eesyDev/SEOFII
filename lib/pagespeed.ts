@@ -18,12 +18,15 @@ async function fetchPageSpeed(url: string): Promise<PageSpeedData> {
       `?url=${encodeURIComponent(url)}&strategy=mobile&category=performance` +
       (PSI_KEY ? `&key=${PSI_KEY}` : "");
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15_000);
-
-    const res = await fetch(apiUrl, { signal: controller.signal }).finally(() =>
-      clearTimeout(timer)
-    );
+    let res: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15_000);
+      res = await fetch(apiUrl, { signal: controller.signal }).finally(() => clearTimeout(timer));
+      if (res.status !== 429) break;
+      await new Promise((r) => setTimeout(r, (attempt + 1) * 3000));
+    }
+    if (!res) return { ...base, fetchError: "no response" };
 
     if (!res.ok) return { ...base, fetchError: `HTTP ${res.status}` };
 
@@ -62,23 +65,13 @@ export async function fetchPageSpeeds(
     };
   }
 
-  // С ключом — параллельно. Без ключа — последовательно с паузой, иначе 429
-  let target: PageSpeedData;
-  let competitors: PageSpeedData[];
-
-  if (PSI_KEY) {
-    [target, ...competitors] = await Promise.all([
-      fetchPageSpeed(targetUrl),
-      ...competitorUrls.map(fetchPageSpeed),
-    ]);
-  } else {
-    const results: PageSpeedData[] = [];
-    for (const u of [targetUrl, ...competitorUrls]) {
-      results.push(await fetchPageSpeed(u));
-      if (results.length < 1 + competitorUrls.length) await new Promise((r) => setTimeout(r, 2000));
-    }
-    [target, ...competitors] = results;
+  // Всегда последовательно — PSI блокирует параллельные запросы (429) даже с ключом
+  const results: PageSpeedData[] = [];
+  for (const u of [targetUrl, ...competitorUrls]) {
+    results.push(await fetchPageSpeed(u));
+    if (results.length < 1 + competitorUrls.length) await new Promise((r) => setTimeout(r, 2000));
   }
+  const [target, ...competitors] = results;
 
   return { target, competitors };
 }
