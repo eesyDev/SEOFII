@@ -62,7 +62,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async createUser({ user }) {
       await prisma.user.update({
         where: { id: user.id },
-        data: { plan: "FREE", reportsLimit: 3 },
+        data: { plan: "FREE", reportsLimit: 1 },
       });
     },
   },

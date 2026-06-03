@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const user = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!user) return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
 
-  if (user.reportsUsed >= user.reportsLimit) {
+  if (user.reportsLimit !== null && user.reportsUsed >= user.reportsLimit) {
     return NextResponse.json(
       { error: "Лимит отчётов исчерпан. Перейди на платный план.", code: "LIMIT_REACHED" },
       { status: 403 }
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
   const url: string = body?.url;
   const projectId: string | undefined = body?.projectId;
   const gscData = body?.gscData ?? null;
+  const locationCode: number = body?.locationCode ?? 2840;
 
   if (!url) return NextResponse.json({ error: "URL обязателен" }, { status: 400 });
 
@@ -38,17 +39,20 @@ export async function POST(req: NextRequest) {
       projectId: projectId || null,
       status: "PENDING",
       gscData,
+      locationCode,
     },
   });
 
   if (process.env.TRIGGER_SECRET_KEY) {
-    // Async via Trigger.dev — отвечаем сразу, задача идёт в фоне
     const { tasks } = await import("@trigger.dev/sdk/v3");
     await tasks.trigger("generate-report", { reportId: report.id });
   } else {
-    // Fallback: синхронно (dev без Trigger.dev, мок-режим)
     const { processReport } = await import("@/lib/processReport");
-    await processReport(report.id);
+    try {
+      await processReport(report.id);
+    } catch {
+      // processReport уже сохранил статус FAILED в БД — просто редиректим на страницу отчёта
+    }
   }
 
   return NextResponse.json({ reportId: report.id });

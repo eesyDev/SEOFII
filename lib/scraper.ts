@@ -1,9 +1,11 @@
 import * as cheerio from "cheerio";
 
-const USE_MOCK = !process.env.ANTHROPIC_API_KEY;
+const USE_MOCK = process.env.SCRAPER_MOCK === "true" || (!process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY);
 
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+export type SiteType = "ecommerce" | "content" | "local";
 
 export interface PageSnapshot {
   url: string;
@@ -18,7 +20,9 @@ export interface PageSnapshot {
   imagesCount: number;
   imagesWithAlt: number;
   detectedBlocks: string[];  // эвристика: ["reviews", "faq", "video", ...]
+  siteType: SiteType;
   fetchError?: string;
+  rawHtml?: string;          // очищенный HTML для downstream-анализа
 }
 
 type CheerioRoot = ReturnType<typeof cheerio.load>;
@@ -75,7 +79,8 @@ function detectBlocks($: CheerioRoot, schemaTypes: string[], bodyText: string): 
   // Калькулятор / конфигуратор
   if (
     hasClass("calculator", "configurator", "calc", "конфигур", "калькул") ||
-    $("input[type='range'], input[type='number']").length > 1
+    $("input[type='range'], input[type='number']").length > 1 ||
+    /рассчита[тьй]|расчёт стоимости|расчет стоимости|узнать цену|посчитать|calculate|калькулятор/i.test(bodyText)
   ) blocks.push("calculator");
 
   // Карта / геолокация
@@ -96,6 +101,34 @@ function detectBlocks($: CheerioRoot, schemaTypes: string[], bodyText: string): 
   return [...new Set(blocks)];
 }
 
+function detectSiteType(
+  $: CheerioRoot,
+  schemaTypes: string[],
+  bodyText: string,
+  detectedBlocks: string[]
+): SiteType {
+  const ecommScore = [
+    schemaTypes.some((t) => ["Product", "Offer", "ItemList", "ProductGroup"].includes(t)),
+    /добавить в корзину|купить сейчас|в корзину|buy now|add to cart/i.test(bodyText),
+    $("[class*='cart'], [class*='basket'], [class*='корзин'], [id*='cart']").length > 0,
+    detectedBlocks.includes("price") && (detectedBlocks.includes("gallery") || detectedBlocks.includes("reviews")),
+    $("[class*='product'], [itemtype*='Product']").length > 2,
+  ].filter(Boolean).length;
+
+  const localScore = [
+    schemaTypes.some((t) =>
+      ["LocalBusiness", "Restaurant", "Store", "MedicalBusiness", "AutoDealer", "Hotel"].includes(t)
+    ),
+    detectedBlocks.includes("map"),
+    /режим работы|часы работы|пн[–-]пт|мы находимся|наш адрес/i.test(bodyText),
+    $("address").length > 0,
+  ].filter(Boolean).length;
+
+  if (ecommScore >= 2) return "ecommerce";
+  if (localScore >= 2) return "local";
+  return "content";
+}
+
 async function scrapePage(url: string): Promise<PageSnapshot> {
   const base: PageSnapshot = {
     url,
@@ -110,6 +143,7 @@ async function scrapePage(url: string): Promise<PageSnapshot> {
     imagesCount: 0,
     imagesWithAlt: 0,
     detectedBlocks: [],
+    siteType: "content",
   };
 
   try {
@@ -135,6 +169,9 @@ async function scrapePage(url: string): Promise<PageSnapshot> {
 
     // Удаляем шум перед подсчётом слов
     $("script, style, noscript, nav, footer, header, [aria-hidden='true']").remove();
+
+    // Сохраняем очищенный HTML для downstream-анализа (niche mining и т.д.)
+    const rawHtml = $.html();
 
     const bodyText = $("body").text().replace(/\s+/g, " ").trim();
     const wordCount = bodyText.split(" ").filter((w) => w.length > 1).length;
@@ -167,7 +204,9 @@ async function scrapePage(url: string): Promise<PageSnapshot> {
       if (headings.length < 15) headings.push($(el).text().trim());
     });
 
-    const detectedBlocks = detectBlocks($, schemaTypes, bodyText);
+    const uniqueSchemaTypes = [...new Set(schemaTypes)];
+    const detectedBlocks = detectBlocks($, uniqueSchemaTypes, bodyText);
+    const siteType = detectSiteType($, uniqueSchemaTypes, bodyText, detectedBlocks);
 
     return {
       url,
@@ -176,12 +215,14 @@ async function scrapePage(url: string): Promise<PageSnapshot> {
       h1: $("h1").first().text().trim(),
       wordCount,
       headings,
-      hasSchema: schemaTypes.length > 0,
-      schemaTypes: [...new Set(schemaTypes)],
+      hasSchema: uniqueSchemaTypes.length > 0,
+      schemaTypes: uniqueSchemaTypes,
       internalLinksCount,
       imagesCount: images.length,
       imagesWithAlt,
       detectedBlocks,
+      siteType,
+      rawHtml,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Неизвестная ошибка";
@@ -190,6 +231,13 @@ async function scrapePage(url: string): Promise<PageSnapshot> {
 }
 
 function getMockSnapshot(url: string, isTarget = false): PageSnapshot {
+  const mockHtml = `<html><head><title>Mock</title></head><body>
+    <h1>Mock page</h1><p>This is mock content for testing niche mining pipeline.</p>
+    <section class="reviews"><h2>Отзывы</h2><p>Отличный сервис!</p></section>
+    <section class="faq"><h2>FAQ</h2><p>Часто задаваемые вопросы</p></section>
+    <section class="calculator"><h2>Калькулятор</h2><button>Рассчитать</button></section>
+  </body></html>`;
+
   if (isTarget) {
     return {
       url,
@@ -204,6 +252,8 @@ function getMockSnapshot(url: string, isTarget = false): PageSnapshot {
       imagesCount: 8,
       imagesWithAlt: 3,
       detectedBlocks: ["price", "form"],
+      siteType: "ecommerce",
+      rawHtml: mockHtml,
     };
   }
   const pos = parseInt(new URL(url).hostname.replace("competitor", "")) || 1;
@@ -230,6 +280,8 @@ function getMockSnapshot(url: string, isTarget = false): PageSnapshot {
     imagesCount: 20 + pos * 5,
     imagesWithAlt: 18 + pos * 4,
     detectedBlocks: competitorBlocks,
+    siteType: "ecommerce",
+    rawHtml: mockHtml,
   };
 }
 

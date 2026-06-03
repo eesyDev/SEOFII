@@ -42,7 +42,8 @@ export function BlockMatrixSection({ blockMatrix, competitorDomains }: Props) {
           <LayoutGrid className="h-4 w-4" /> Какие блоки добавить на страницу
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Сравнение с конкурентами — зелёный ✓ означает что блок есть
+          Сравнение с конкурентами — зелёный ✓ означает что блок есть.
+          Анализ статический (без JS), может не видеть динамические компоненты.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">

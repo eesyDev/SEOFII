@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { SerpResult, KeywordData, DomainInfo } from "./dataforseo";
 import type { AnalyticsResult } from "./analytics";
 import type { GscRow } from "./gsc";
-import type { PageSnapshot } from "./scraper";
+import type { PageSnapshot, SiteType } from "./scraper";
 
 const USE_MOCK = !process.env.ANTHROPIC_API_KEY;
 
@@ -106,6 +106,20 @@ export interface BlockRow {
   tip: string;             // что именно добавить, без жаргона
 }
 
+export interface FaqItem {
+  question: string;
+  answer: string;
+}
+
+export interface ReadyContent {
+  title: string;
+  h1: string;
+  metaDescription: string;
+  introParagraph: string;
+  faqItems: FaqItem[];
+  schemaMarkup: string; // JSON-LD ready to paste into <head>
+}
+
 export interface ClaudeResult {
   brief: SEOBrief;
   comparisons: CompetitorComparison[];
@@ -113,6 +127,23 @@ export interface ClaudeResult {
   quickFixes: QuickFix[];
   // Стоимость в USD: входящие токены дороже исходящих
   costUsd: number;
+}
+
+// ─────────────────────────────────────────
+// ХЕЛПЕР: убирает markdown-обёртку перед JSON.parse
+// ─────────────────────────────────────────
+
+function stripJsonFences(text: string): string {
+  const t = text.trim();
+  // Ищем первый { или [ и последний } или ] — работает независимо от обёртки
+  const firstBrace = t.indexOf("{");
+  const firstBracket = t.indexOf("[");
+  if (firstBrace === -1 && firstBracket === -1) return t;
+  const isObj = firstBracket === -1 || (firstBrace !== -1 && firstBrace < firstBracket);
+  const start = isObj ? firstBrace : firstBracket;
+  const end = isObj ? t.lastIndexOf("}") : t.lastIndexOf("]");
+  if (end === -1 || end < start) return t;
+  return t.slice(start, end + 1);
 }
 
 // ─────────────────────────────────────────
@@ -197,7 +228,7 @@ function getMockBrief(targetUrl: string, competitors: SerpResult[]): { brief: SE
   return {
     brief: {
       targetKeyword: `seo services for ${domain}`,
-      recommendedTitle: `Best SEO Services 2025 | ${domain} — Top Ranked`,
+      recommendedTitle: `Best SEO Services 2026 | ${domain} — Top Ranked`,
       recommendedMetaDescription: `Discover the best SEO strategies for ${domain}. Expert analysis, competitor insights, and actionable recommendations for top rankings.`,
       recommendedH1: `Complete SEO Guide for ${domain}`,
       contentStructure: [
@@ -351,13 +382,25 @@ function getMockBrief(targetUrl: string, competitors: SerpResult[]): { brief: SE
 // ГЕНЕРАЦИЯ ТЗ
 // ─────────────────────────────────────────
 
+const SITE_TYPE_CONTEXT: Record<SiteType, string> = {
+  ecommerce: `ТИП САЙТА: Интернет-магазин / карточка товара или категория.
+Фокус брифа: конверсионные элементы (цена, CTA, корзина), schema.org Product/Offer, фильтры, характеристики товара, доверительные сигналы (отзывы, гарантия, доставка), внутренняя перелинковка по каталогу.
+НЕ рекомендуй длинные информационные тексты — для e-comm важны структурированность и конверсия.`,
+  content: `ТИП САЙТА: Информационный сайт / блог / статья.
+Фокус брифа: глубина и экспертность контента, E-E-A-T сигналы, FAQ для featured snippets, структура заголовков, внутренняя перелинковка по теме, автор и источники.`,
+  local: `ТИП САЙТА: Локальный бизнес (офлайн-точка, услуги с адресом).
+Фокус брифа: LocalBusiness schema, NAP (имя/адрес/телефон), карта и часы работы, отзывы с привязкой к местоположению, ключи с гео-уточнениями, Google Business Profile.`,
+};
+
 export async function generateSEOBrief(
   targetUrl: string,
   competitors: SerpResult[],
   keywords: KeywordData[],
   domainInfo: DomainInfo[] = [],
   analytics?: AnalyticsResult,
-  gscRows: GscRow[] = []
+  gscRows: GscRow[] = [],
+  siteType: SiteType = "content",
+  targetSnapshot?: PageSnapshot
 ): Promise<{ brief: SEOBrief; costUsd: number }> {
   if (USE_MOCK) return getMockBrief(targetUrl, competitors);
 
@@ -414,10 +457,34 @@ ${gapList || "нет данных"}
 `;
   }
 
+  let targetPageBlock = "";
+  if (targetSnapshot && !targetSnapshot.fetchError) {
+    const blocks = targetSnapshot.detectedBlocks.length > 0
+      ? targetSnapshot.detectedBlocks.join(", ")
+      : "не обнаружено";
+    const headings = targetSnapshot.headings.length > 0
+      ? targetSnapshot.headings.map((h) => `  - ${h}`).join("\n")
+      : "  нет данных";
+    targetPageBlock = `
+ЧТО УЖЕ ЕСТЬ НА АНАЛИЗИРУЕМОЙ СТРАНИЦЕ (результат скрапинга):
+- Title: ${targetSnapshot.title || "н/д"}
+- H1: ${targetSnapshot.h1 || "н/д"}
+- Кол-во слов: ${targetSnapshot.wordCount}
+- Разделы (H2/H3):
+${headings}
+- Обнаруженные блоки: ${blocks}
+- Schema.org: ${targetSnapshot.schemaTypes.length > 0 ? targetSnapshot.schemaTypes.join(", ") : "нет"}
+
+ВАЖНО: при формировании contentGaps НЕ рекомендуй создавать страницы или блоки, которые уже есть на сайте согласно данным выше.
+`;
+  }
+
   const prompt = `Ты — опытный SEO-специалист. На основе анализа конкурентов создай детальное ТЗ для копирайтера.
 
 АНАЛИЗИРУЕМАЯ СТРАНИЦА: ${targetUrl}
 
+${SITE_TYPE_CONTEXT[siteType]}
+${targetPageBlock}
 ТОП-10 КОНКУРЕНТОВ В ВЫДАЧЕ (с заголовками и сниппетами из поиска):
 ${competitorList}
 
@@ -477,15 +544,19 @@ contentGaps — массив из 4–6 объектов:
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 4000,
+    max_tokens: 12000,
     messages: [{ role: "user", content: prompt }],
   });
 
   const responseText = message.content[0].type === "text" ? message.content[0].text : "";
 
+  if (message.stop_reason === "max_tokens") {
+    throw new Error(`Claude не успел дописать JSON (превышен лимит токенов). Попробуй ещё раз.`);
+  }
+
   let brief: SEOBrief;
   try {
-    brief = JSON.parse(responseText);
+    brief = JSON.parse(stripJsonFences(responseText));
   } catch {
     throw new Error(`Claude вернул невалидный JSON: ${responseText.slice(0, 200)}`);
   }
@@ -557,14 +628,14 @@ ${compText}
 }`;
 
       const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 1200,
         messages: [{ role: "user", content: prompt }],
       });
 
       const text = message.content[0].type === "text" ? message.content[0].text : "";
       try {
-        return JSON.parse(text) as CompetitorComparison;
+        return JSON.parse(stripJsonFences(text)) as CompetitorComparison;
       } catch {
         return null;
       }
@@ -582,7 +653,8 @@ export async function generateQuickFixes(
   targetUrl: string,
   brief: SEOBrief,
   comparisons: CompetitorComparison[],
-  analytics: AnalyticsResult
+  analytics: AnalyticsResult,
+  siteType: SiteType = "content"
 ): Promise<QuickFix[]> {
   if (USE_MOCK) return getMockQuickFixes(targetUrl);
 
@@ -597,7 +669,16 @@ export async function generateQuickFixes(
     .map((r) => `- "${r.query}": позиция ${r.position.toFixed(1)}, ${r.impressions} показов`)
     .join("\n");
 
+  const siteTypeHint =
+    siteType === "ecommerce"
+      ? "Сайт — интернет-магазин. Приоритет: карточка товара, конверсия, schema Product, доставка/гарантия, отзывы, цены."
+      : siteType === "local"
+      ? "Сайт — локальный бизнес. Приоритет: адрес/контакты, LocalBusiness schema, отзывы с геопривязкой, ключи с городом."
+      : "Сайт — информационный. Приоритет: структура текста, экспертность, FAQ, автор, внутренние ссылки.";
+
   const prompt = `Ты помощник для владельцев бизнеса. На основе SEO-анализа составь список из 3–5 конкретных задач которые владелец может сделать сам, прямо сейчас.
+
+${siteTypeHint}
 
 URL страницы: ${targetUrl}
 Рекомендуемый title: ${brief.recommendedTitle}
@@ -630,14 +711,14 @@ ${quickWins || "Данных нет"}
 ]`;
 
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 1500,
     messages: [{ role: "user", content: prompt }],
   });
 
   const text = message.content[0].type === "text" ? message.content[0].text : "";
   try {
-    return JSON.parse(text) as QuickFix[];
+    return JSON.parse(stripJsonFences(text)) as QuickFix[];
   } catch {
     return [];
   }
@@ -647,19 +728,49 @@ ${quickWins || "Данных нет"}
 // МАТРИЦА БЛОКОВ
 // ─────────────────────────────────────────
 
-const BLOCK_LABELS: Record<string, string> = {
-  reviews:          "Отзывы покупателей",
-  faq:              "Частые вопросы (FAQ)",
-  video:            "Видео-обзор",
-  price:            "Цены / прайс",
-  comparison_table: "Таблица сравнения",
-  gallery:          "Фотогалерея",
-  social_proof:     "Счётчик клиентов/продаж",
-  calculator:       "Калькулятор / конфигуратор",
-  map:              "Карта / адрес",
-  form:             "Форма заявки / обратная связь",
-  chat:             "Онлайн-чат",
+
+const BLOCK_LABELS_ECOMMERCE: Record<string, string> = {
+  gallery:           "Фотогалерея товара",
+  price:             "Цена + кнопка «Купить»",
+  reviews:           "Отзывы покупателей",
+  comparison_table:  "Таблица характеристик",
+  social_proof:      "Счётчик продаж/покупателей",
+  video:             "Видео-обзор товара",
+  related_products:  "Похожие / рекомендуемые товары",
+  delivery_info:     "Условия доставки",
+  warranty:          "Гарантия и возврат",
+  installment:       "Рассрочка / кредит",
+  calculator:        "Конфигуратор / калькулятор",
+  faq:               "Частые вопросы (FAQ)",
+  chat:              "Онлайн-чат",
 };
+
+const BLOCK_LABELS_CONTENT: Record<string, string> = {
+  faq:               "Частые вопросы (FAQ)",
+  table_of_contents: "Оглавление / навигация",
+  author_bio:        "Биография автора",
+  video:             "Видео по теме",
+  comparison_table:  "Таблица сравнения",
+  infographic:       "Инфографика / схема",
+  related_articles:  "Похожие статьи",
+  social_proof:      "Счётчик читателей / поделились",
+  form:              "Форма подписки / заявки",
+};
+
+const BLOCK_LABELS_LOCAL: Record<string, string> = {
+  map:               "Карта и адрес",
+  reviews:           "Отзывы с геопривязкой",
+  price:             "Цены / прейскурант",
+  working_hours:     "Часы работы",
+  form:              "Форма заявки / обратный звонок",
+  gallery:           "Фото объекта / работ",
+  social_proof:      "Счётчик клиентов",
+  faq:               "Частые вопросы",
+  chat:              "Онлайн-чат / мессенджер",
+};
+
+// legacy — используется в getMockBlockMatrix
+const BLOCK_LABELS = BLOCK_LABELS_ECOMMERCE;
 
 function getMockBlockMatrix(competitorCount: number): BlockRow[] {
   return [
@@ -718,11 +829,16 @@ function getMockBlockMatrix(competitorCount: number): BlockRow[] {
 export async function generateBlockMatrix(
   targetSnapshot: PageSnapshot,
   competitorSnapshots: PageSnapshot[],
-  competitors: SerpResult[]
+  competitors: SerpResult[],
+  siteType: SiteType = "content"
 ): Promise<BlockRow[]> {
   if (USE_MOCK) return getMockBlockMatrix(competitorSnapshots.length);
 
-  const allKnownBlocks = Object.keys(BLOCK_LABELS);
+  const blockLabels =
+    siteType === "ecommerce" ? BLOCK_LABELS_ECOMMERCE :
+    siteType === "local"     ? BLOCK_LABELS_LOCAL :
+                               BLOCK_LABELS_CONTENT;
+  const allKnownBlocks = Object.keys(blockLabels);
 
   const formatPage = (snap: PageSnapshot, label: string) =>
     `${label}:
@@ -738,12 +854,19 @@ export async function generateBlockMatrix(
     ),
   ].join("\n\n");
 
+  const siteTypeLabel =
+    siteType === "ecommerce" ? "Интернет-магазин" :
+    siteType === "local"     ? "Локальный бизнес" :
+                               "Информационный сайт";
+
   const prompt = `Ты SEO-аналитик. Проанализируй страницы и составь матрицу контентных блоков.
+
+ТИП САЙТА: ${siteTypeLabel}
 
 ${pagesText}
 
 Список блоков для анализа (можешь добавить свои если видишь в заголовках):
-${allKnownBlocks.map((k) => `- ${k}: ${BLOCK_LABELS[k]}`).join("\n")}
+${allKnownBlocks.map((k) => `- ${k}: ${blockLabels[k]}`).join("\n")}
 
 Задача:
 1. Для каждого блока определи: есть ли он на каждой странице (используй эвристику + заголовки как подсказку)
@@ -765,15 +888,204 @@ ${allKnownBlocks.map((k) => `- ${k}: ${BLOCK_LABELS[k]}`).join("\n")}
 ]`;
 
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 2000,
     messages: [{ role: "user", content: prompt }],
   });
 
   const text = message.content[0].type === "text" ? message.content[0].text : "";
   try {
-    return JSON.parse(text) as BlockRow[];
+    return JSON.parse(stripJsonFences(text)) as BlockRow[];
   } catch {
     return [];
+  }
+}
+
+// ─────────────────────────────────────────
+// ГОТОВЫЙ КОНТЕНТ ДЛЯ КОПИПАСТА (Pro)
+// ─────────────────────────────────────────
+
+function getMockReadyContent(targetUrl: string, brief: SEOBrief): ReadyContent {
+  const domain = (() => { try { return new URL(targetUrl).hostname; } catch { return targetUrl; } })();
+  return {
+    title: brief.recommendedTitle,
+    h1: brief.recommendedH1,
+    metaDescription: brief.recommendedMetaDescription,
+    introParagraph: `Если вы ищете ${brief.targetKeyword} — вы попали по адресу. На ${domain} мы собрали всё что нужно: подробные характеристики, реальные отзывы покупателей и честные цены. Ниже — полный обзор который поможет сделать правильный выбор без лишней траты времени.`,
+    faqItems: [
+      { question: `Как выбрать ${brief.targetKeyword}?`, answer: `При выборе обратите внимание на три ключевых параметра: качество материалов, соответствие вашим задачам и репутацию производителя. Мы рекомендуем сначала определить бюджет, затем сравнить характеристики в нашем каталоге.` },
+      { question: `Сколько стоит ${brief.targetKeyword}?`, answer: `Цена зависит от комплектации и производителя. В нашем каталоге представлены варианты в разных ценовых категориях — от бюджетных до премиум. Актуальные цены всегда указаны на странице товара.` },
+      { question: `Какие гарантии вы предоставляете?`, answer: `На все товары распространяется официальная гарантия производителя. Дополнительно мы предлагаем собственную гарантию качества: если товар не подойдёт, вернём деньги в течение 14 дней.` },
+      { question: `Как быстро осуществляется доставка?`, answer: `Доставка по Москве — 1–2 рабочих дня, по России — 3–7 дней в зависимости от региона. Самовывоз из нашего шоурума доступен в день заказа.` },
+      { question: `Можно ли посмотреть товар вживую?`, answer: `Да, все представленные модели можно увидеть в нашем шоуруме. Адрес и часы работы указаны в разделе «Контакты». Рекомендуем записаться заранее чтобы менеджер уделил вам время.` },
+    ],
+    schemaMarkup: JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": `Как выбрать ${brief.targetKeyword}?`, "acceptedAnswer": { "@type": "Answer", "text": "При выборе обратите внимание на качество материалов, соответствие задачам и репутацию производителя." } },
+        { "@type": "Question", "name": `Сколько стоит ${brief.targetKeyword}?`, "acceptedAnswer": { "@type": "Answer", "text": "Цена зависит от комплектации и производителя. Актуальные цены указаны на странице товара." } },
+      ],
+    }, null, 2),
+  };
+}
+
+export async function generateReadyContent(
+  targetUrl: string,
+  brief: SEOBrief,
+  siteType: SiteType = "content"
+): Promise<ReadyContent> {
+  if (USE_MOCK) return getMockReadyContent(targetUrl, brief);
+
+  const schemaType =
+    siteType === "ecommerce" ? "Product + Offer" :
+    siteType === "local"     ? "LocalBusiness" :
+                               "Article + FAQPage";
+
+  const prompt = `Ты SEO-копирайтер. Создай готовый контент для страницы — всё что можно сразу скопировать и вставить на сайт.
+
+URL: ${targetUrl}
+Тип сайта: ${siteType === "ecommerce" ? "Интернет-магазин" : siteType === "local" ? "Локальный бизнес" : "Информационный сайт"}
+Целевой ключ: ${brief.targetKeyword}
+Рекомендации из брифа:
+- Title: ${brief.recommendedTitle}
+- H1: ${brief.recommendedH1}
+- Meta: ${brief.recommendedMetaDescription}
+- Объём: ${brief.wordCountRecommendation} слов
+- Ключи для включения: ${brief.topKeywordsToInclude.slice(0, 8).join(", ")}
+
+Правила:
+- title: строго до 60 символов, содержит ключ, без кликбейта
+- h1: до 70 символов, естественный язык
+- metaDescription: до 155 символов, продающий, с призывом
+- introParagraph: 100–150 слов, ключ в первом предложении, отвечает на запрос, без воды
+- faqItems: ровно 5 реальных вопросов. Ответ 50–80 слов, конкретный
+- schemaMarkup: валидный JSON-LD для ${schemaType}, готовый для вставки в <script type="application/ld+json">
+
+Отвечай ТОЛЬКО JSON:
+{
+  "title": "...",
+  "h1": "...",
+  "metaDescription": "...",
+  "introParagraph": "...",
+  "faqItems": [
+    { "question": "...", "answer": "..." }
+  ],
+  "schemaMarkup": "...строка с JSON-LD..."
+}`;
+
+  const message = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 2500,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = message.content[0].type === "text" ? message.content[0].text : "";
+  try {
+    return JSON.parse(stripJsonFences(text)) as ReadyContent;
+  } catch {
+    return getMockReadyContent(targetUrl, brief);
+  }
+}
+
+// ─────────────────────────────────────────
+// SCHEMA.ORG: генерация JSON-LD разметки
+// ─────────────────────────────────────────
+
+export interface SchemaResult {
+  schemas: SchemaBlock[];
+}
+
+export interface SchemaBlock {
+  type: string;
+  description: string;
+  code: string;
+}
+
+function getMockSchemaResult(url: string, siteType: SiteType): SchemaResult {
+  const domain = new URL(url).hostname;
+  return {
+    schemas: [
+      {
+        type: "LocalBusiness",
+        description: "Основная разметка организации — появляется в Картах и Knowledge Panel",
+        code: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "LocalBusiness",
+          "name": domain,
+          "url": url,
+          "telephone": "+7 (000) 000-00-00",
+          "address": { "@type": "PostalAddress", "addressLocality": "Москва", "addressCountry": "RU" },
+        }, null, 2),
+      },
+      {
+        type: "FAQPage",
+        description: "Расширенные сниппеты с ответами прямо в выдаче",
+        code: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          "mainEntity": [{ "@type": "Question", "name": "Пример вопроса?", "acceptedAnswer": { "@type": "Answer", "text": "Пример ответа." } }],
+        }, null, 2),
+      },
+    ],
+  };
+}
+
+export async function generateSchemaMarkup(
+  url: string,
+  brief: SEOBrief,
+  siteType: SiteType,
+  detectedBlocks: string[] = [],
+  existingSchemas: string[] = []
+): Promise<SchemaResult> {
+  if (USE_MOCK) return getMockSchemaResult(url, siteType);
+
+  const siteTypeLabel =
+    siteType === "ecommerce" ? "Интернет-магазин" :
+    siteType === "local"     ? "Локальный бизнес / сервисная компания" :
+                               "Информационный / контентный сайт";
+
+  const blocksInfo = detectedBlocks.length > 0
+    ? `Обнаруженные блоки на странице: ${detectedBlocks.join(", ")}`
+    : "Блоки не определены";
+
+  const existingInfo = existingSchemas.length > 0
+    ? `Уже есть schema.org: ${existingSchemas.join(", ")} — не дублируй их.`
+    : "Schema.org на странице отсутствует.";
+
+  const prompt = `Ты — технический SEO-специалист. Сгенерируй валидные schema.org JSON-LD разметки для страницы.
+
+URL: ${url}
+Тип сайта: ${siteTypeLabel}
+Основной ключ: ${brief.targetKeyword}
+Title: ${brief.recommendedTitle}
+${blocksInfo}
+${existingInfo}
+
+Задача: подобрать 2–3 типа schema.org которые дадут наибольший SEO-эффект для этого сайта.
+Заполни реальными данными на основе URL и типа бизнеса. Если данных нет — используй плейсхолдеры [ЗАПОЛНИТЬ: описание].
+
+Отвечай ТОЛЬКО JSON:
+{
+  "schemas": [
+    {
+      "type": "Тип схемы",
+      "description": "Зачем эта схема и что даёт в выдаче (1 предложение)",
+      "code": "...валидный JSON-LD как строка..."
+    }
+  ]
+}`;
+
+  const message = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 3000,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = message.content[0].type === "text" ? message.content[0].text : "";
+  try {
+    return JSON.parse(stripJsonFences(text)) as SchemaResult;
+  } catch {
+    return getMockSchemaResult(url, siteType);
   }
 }

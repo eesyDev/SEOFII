@@ -1,0 +1,194 @@
+{
+  "Landing": {
+    "nav": {
+      "login": "Войти",
+      "register": "Начать бесплатно"
+    },
+    "hero": {
+      "badge": "Powered by Claude AI + DataForSEO",
+      "h1": "SEO-анализ и готовый",
+      "h1Accent": "контент за минуту",
+      "subtitle": "Вставь URL — получи разбор конкурентов, список задач и готовые тексты которые можно сразу скопировать на сайт.",
+      "ctaPrimary": "Попробовать бесплатно",
+      "ctaSecondary": "Войти в аккаунт"
+    },
+    "stats": {
+      "timeValue": "1–2 мин",
+      "timeLabel": "время генерации",
+      "aiValue": "Claude AI",
+      "aiLabel": "под капотом",
+      "tasksValue": "5 задач",
+      "tasksLabel": "что делать прямо сейчас"
+    },
+    "howItWorks": {
+      "sectionLabel": "Как это работает",
+      "title": "Три шага — и готово",
+      "features": [
+        {
+          "title": "Анализ конкурентов",
+          "description": "Вставь URL — находим всех кто ранжируется выше тебя и разбираем почему"
+        },
+        {
+          "title": "Gap-анализ и quick wins",
+          "description": "Показываем какие ключевые слова у конкурентов есть, а у тебя нет — и что проще всего исправить"
+        },
+        {
+          "title": "Готовый контент",
+          "description": "Claude AI пишет title, H1, meta description, первый абзац и FAQ — копируй и вставляй"
+        }
+      ]
+    },
+    "pricing": {
+      "sectionLabel": "Тарифы",
+      "title": "Начни бесплатно",
+      "subtitle": "Масштабируй по мере роста",
+      "plans": {
+        "free": {
+          "description": "Попробуй без рисков",
+          "perks": ["1 отчёт", "Анализ конкурентов", "Список задач"],
+          "cta": "Начать бесплатно"
+        },
+        "starter": {
+          "description": "4 отчёта / мес",
+          "perks": ["Полный анализ конкурентов", "Готовый контент для копипаста", "FAQ и schema.org разметка", "Email поддержка"],
+          "cta": "Выбрать Starter"
+        },
+        "pro": {
+          "description": "10 отчётов / мес",
+          "perks": ["Всё из Starter", "Больше отчётов", "Приоритетная поддержка"],
+          "cta": "Выбрать Pro",
+          "badge": "Популярный"
+        },
+        "agency": {
+          "description": "30 отчётов / мес",
+          "perks": ["Всё из Pro", "Командный доступ", "White-label отчёты"],
+          "cta": "Скоро"
+        }
+      }
+    },
+    "cta": {
+      "title": "Попробуй прямо сейчас",
+      "subtitle": "Первый отчёт бесплатно. Без кредитной карты.",
+      "button": "Начать бесплатно"
+    },
+    "footer": {
+      "copyright": "© 2026 SEOBrief. Все права защищены."
+    }
+  },
+  "Sidebar": {
+    "dashboard": "Дашборд",
+    "projects": "Проекты",
+    "reports": "Отчёты",
+    "billing": "Биллинг",
+    "settings": "Настройки",
+    "plan": "план",
+    "reportsUsed": "отчётов использовано",
+    "upgradePro": "Перейти на Pro →"
+  },
+  "Header": {
+    "profile": "Профиль",
+    "settings": "Настройки",
+    "signOut": "Выйти",
+    "toggleTheme": "Переключить тему"
+  },
+  "Auth": {
+    "login": {
+      "title": "Добро пожаловать",
+      "subtitle": "Войдите в свой аккаунт",
+      "googleButton": "Войти через Google",
+      "or": "или",
+      "emailLabel": "Email",
+      "passwordLabel": "Пароль",
+      "submit": "Войти",
+      "submitting": "Входим...",
+      "noAccount": "Нет аккаунта?",
+      "registerLink": "Зарегистрироваться",
+      "invalidCredentials": "Неверный email или пароль"
+    },
+    "register": {
+      "title": "Создать аккаунт",
+      "subtitle": "3 отчёта бесплатно — без карты",
+      "googleButton": "Зарегистрироваться через Google",
+      "or": "или",
+      "nameLabel": "Имя",
+      "namePlaceholder": "Иван Иванов",
+      "emailLabel": "Email",
+      "passwordLabel": "Пароль",
+      "passwordPlaceholder": "Минимум 8 символов",
+      "ruleLength": "Минимум 8 символов",
+      "ruleLetter": "Хотя бы одна буква",
+      "ruleDigit": "Хотя бы одна цифра",
+      "submit": "Зарегистрироваться",
+      "submitting": "Создаём аккаунт...",
+      "hasAccount": "Уже есть аккаунт?",
+      "loginLink": "Войти",
+      "errorGeneric": "Ошибка регистрации",
+      "errorLoginAfterRegister": "Аккаунт создан, но не удалось войти. Попробуй войти вручную."
+    }
+  },
+  "Dashboard": {
+    "title": "Дашборд",
+    "welcome": "Добро пожаловать, {name}",
+    "newReport": "Новый отчёт",
+    "reportsUsedLabel": "Отчётов использовано",
+    "projectsLabel": "Проектов",
+    "planLabel": "Тариф",
+    "manageLink": "Управлять →",
+    "upgradeLink": "Улучшить план →",
+    "recentReports": "Последние отчёты",
+    "allReports": "Все отчёты",
+    "emptyText": "Ещё нет отчётов",
+    "emptyButton": "Создать первый отчёт",
+    "statusPending": "В очереди",
+    "statusProcessing": "Обрабатывается",
+    "statusDone": "Готов",
+    "statusFailed": "Ошибка"
+  },
+  "Billing": {
+    "title": "Биллинг",
+    "subtitle": "Управляй подпиской и тарифом",
+    "currentPlan": "Текущий тариф",
+    "nextBilling": "Следующее списание: {date}",
+    "reportsUsed": "Отчётов использовано",
+    "plans": "Планы",
+    "manageSub": "Управление подпиской",
+    "manageSubText": "Для отмены подписки или получения счётов — обратись в поддержку или управляй подпиской через LemonSqueezy.",
+    "active": "Активен",
+    "current": "Текущий",
+    "popular": "Популярный",
+    "unlimited": "Безлимитные отчёты",
+    "reportsPerMonth": "{count} отчётов / мес",
+    "free": { "description": "Попробуй без рисков" },
+    "comingSoon": "Скоро — напиши нам",
+    "freeFeatures": ["1 отчёт", "Анализ конкурентов", "Список задач (без готового контента)"]
+  },
+  "Settings": {
+    "title": "Настройки",
+    "subtitle": "Управляй профилем и аккаунтом",
+    "profileTitle": "Профиль",
+    "profileDesc": "Имя и email",
+    "passwordTitle": "Пароль",
+    "passwordDesc": "Смени пароль от аккаунта",
+    "planTitle": "Тариф",
+    "planDesc": "Текущий план и использование"
+  },
+  "Reports": {
+    "title": "Отчёты",
+    "newReport": "Новый отчёт",
+    "emptyText": "Ещё нет отчётов",
+    "emptyButton": "Создать первый отчёт",
+    "statusPending": "В очереди",
+    "statusProcessing": "Обрабатывается",
+    "statusDone": "Готов",
+    "statusFailed": "Ошибка"
+  },
+  "Projects": {
+    "title": "Проекты",
+    "newProject": "Новый проект",
+    "emptyText": "Ещё нет проектов",
+    "emptyButton": "Создать первый проект"
+  },
+  "Common": {
+    "copyright": "© 2026 SEOBrief"
+  }
+}

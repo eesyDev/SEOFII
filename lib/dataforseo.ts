@@ -43,6 +43,70 @@ export interface DomainInfo {
 }
 
 // ─────────────────────────────────────────
+// LOCALES
+// ─────────────────────────────────────────
+
+// Домены-агрегаторы/медиа/соцсети — не являются реальными конкурентами в нише
+export const AGGREGATOR_DOMAINS = new Set([
+  // Соцсети
+  "vk.com", "vkontakte.ru", "ok.ru", "instagram.com", "facebook.com",
+  "twitter.com", "x.com", "youtube.com", "tiktok.com", "t.me", "telegram.org",
+  "zen.yandex.ru", "dzen.ru",
+  // Медиа / блоги
+  "vc.ru", "dtf.ru", "habr.com", "sostav.ru", "rb.ru", "forbes.ru",
+  "rbc.ru", "kommersant.ru", "vedomosti.ru", "incrussia.ru", "tadviser.ru",
+  "pikabu.ru", "livejournal.com", "medium.com",
+  // Рейтинги / агрегаторы отзывов
+  "zoon.ru", "flamp.ru", "yell.ru", "otzovik.com", "irecommend.ru",
+  "tripadvisor.com", "sravni.ru", "banki.ru", "ratingfirmporemontu.ru",
+  // Поиск / карты / справочники
+  "google.com", "yandex.ru", "2gis.ru", "yandex.ru",
+  // Маркетплейсы / доски
+  "ozon.ru", "wildberries.ru", "avito.ru", "youla.ru", "cian.ru", "domclick.ru",
+  // Энциклопедии
+  "wikipedia.org", "ru.wikipedia.org", "wikihow.com",
+]);
+
+function isNonCompetitor(url: string, targetDomain: string): boolean {
+  try {
+    const domain = new URL(url).hostname.replace(/^www\./, "");
+    if (domain === targetDomain) return true; // сам анализируемый сайт
+    if (AGGREGATOR_DOMAINS.has(domain)) return true;
+    // рейтинговые сайты по паттернам
+    if (/rating|reiting|рейтинг|лучш|top\d|топ\d/.test(domain)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export function isAggregatorDomain(url: string): boolean {
+  try {
+    const domain = new URL(url).hostname.replace(/^www\./, "");
+    return AGGREGATOR_DOMAINS.has(domain);
+  } catch {
+    return false;
+  }
+}
+
+// Только страны, которые DataForSEO SERP реально поддерживает
+export const LOCATIONS: Record<string, { code: number; label: string }> = {
+  US: { code: 2840, label: "США (Google.com)" },
+  UK: { code: 2826, label: "Великобритания" },
+  DE: { code: 2276, label: "Германия" },
+  FR: { code: 2250, label: "Франция" },
+  KZ: { code: 2398, label: "Казахстан (Русский язык)" },
+  UA: { code: 2804, label: "Украина" },
+};
+
+const LOCATION_LANGUAGE: Record<number, string> = {
+  2398: "ru", 2804: "ru",
+  2840: "en", 2826: "en",
+  2276: "de",
+  2250: "fr",
+};
+
+// ─────────────────────────────────────────
 // SERP: топ-10 конкурентов по URL
 // ─────────────────────────────────────────
 
@@ -79,11 +143,16 @@ function getMockKeywords(keywords: string[]): KeywordData[] {
   }));
 }
 
-export async function fetchCompetitors(url: string): Promise<SerpResult[]> {
+export async function fetchCompetitors(url: string, locationCode = 2840, searchQuery?: string): Promise<SerpResult[]> {
   if (USE_MOCK) return getMockCompetitors(url);
 
-  const targetUrl = new URL(url);
-  const searchQuery = targetUrl.hostname + " " + targetUrl.pathname.replace(/\//g, " ").trim();
+  if (!searchQuery) {
+    const targetUrl = new URL(url);
+    searchQuery = targetUrl.hostname + " " + targetUrl.pathname.replace(/\//g, " ").trim();
+  }
+
+  // Язык определяем по локации
+  const languageCode = LOCATION_LANGUAGE[locationCode] ?? "en";
 
   const response = await fetch(`${BASE_URL}/serp/google/organic/live/advanced`, {
     method: "POST",
@@ -91,39 +160,128 @@ export async function fetchCompetitors(url: string): Promise<SerpResult[]> {
     body: JSON.stringify([
       {
         keyword: searchQuery,
-        location_code: 2840, // США по умолчанию, потом сделать настраиваемым
-        language_code: "en",
+        location_code: locationCode,
+        language_code: languageCode,
         depth: 10,
       },
     ]),
   });
 
   if (!response.ok) {
-    throw new Error(`DataForSEO SERP error: ${response.status}`);
+    let detail = "";
+    try { const body = await response.json(); detail = JSON.stringify(body).slice(0, 200); } catch {}
+    throw new Error(`DataForSEO SERP error: ${response.status}${detail ? " — " + detail : ""}`);
   }
 
   const data = await response.json();
-  const items = data?.tasks?.[0]?.result?.[0]?.items ?? [];
+  const task = data?.tasks?.[0];
+  const taskStatus = task?.status_code;
+  const taskMessage = task?.status_message ?? "";
 
-  return items
-    .filter((item: any) => item.type === "organic")
-    .slice(0, 10)
-    .map((item: any, index: number) => ({
-      domain: new URL(item.url).hostname,
-      position: index + 1,
-      title: item.title ?? "",
-      url: item.url ?? "",
-      snippet: item.description ?? "",
+  if (taskStatus && taskStatus !== 20000) {
+    if (taskStatus === 40204 || taskMessage.includes("Access denied") || taskMessage.includes("activate your subscription")) {
+      throw new Error("DataForSEO SERP API не активирован. Зайди в app.dataforseo.com → Plans and Subscriptions и включи SERP API.");
+    }
+    throw new Error(`DataForSEO SERP: ${taskStatus} — ${taskMessage}`);
+  }
+
+  const items = task?.result?.[0]?.items ?? [];
+  const organic = items.filter((item: any) => item.type === "organic");
+
+  if (organic.length === 0) {
+    throw new Error(`DataForSEO SERP вернул 0 результатов для запроса "${searchQuery}". Проверь что SERP API активирован в app.dataforseo.com.`);
+  }
+
+  const targetDomain = new URL(url).hostname.replace(/^www\./, "");
+
+  const competitors = organic
+    .filter((item: any) => !isNonCompetitor(item.url ?? "", targetDomain))
+    .slice(0, 10);
+
+  if (competitors.length === 0) {
+    throw new Error(`Не удалось найти реальных конкурентов в выдаче — все результаты оказались агрегаторами или соцсетями. Попробуй другой запрос.`);
+  }
+
+  return competitors.map((item: any, index: number) => ({
+    domain: new URL(item.url).hostname,
+    position: index + 1,
+    title: item.title ?? "",
+    url: item.url ?? "",
+    snippet: item.description ?? "",
+  }));
+}
+
+// ─────────────────────────────────────────
+// SERP: топ-10 по запросу (без фильтрации целевого URL)
+// Используется в niche mining — нам не нужно исключать "сам себя"
+// ─────────────────────────────────────────
+
+export async function fetchSerpResults(query: string, locationCode = 2840): Promise<SerpResult[]> {
+  if (USE_MOCK) {
+    return Array.from({ length: 10 }, (_, i) => ({
+      domain: `competitor${i + 1}.com`,
+      position: i + 1,
+      title: `Result ${i + 1} for "${query}"`,
+      url: `https://competitor${i + 1}.com/page`,
+      snippet: `Mock snippet for query "${query}"`,
     }));
+  }
+
+  const languageCode = LOCATION_LANGUAGE[locationCode] ?? "en";
+
+  const response = await fetch(`${BASE_URL}/serp/google/organic/live/advanced`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify([
+      {
+        keyword: query,
+        location_code: locationCode,
+        language_code: languageCode,
+        depth: 10,
+      },
+    ]),
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try { const body = await response.json(); detail = JSON.stringify(body).slice(0, 200); } catch {}
+    throw new Error(`DataForSEO SERP error: ${response.status}${detail ? " — " + detail : ""}`);
+  }
+
+  const data = await response.json();
+  const task = data?.tasks?.[0];
+  const taskStatus = task?.status_code;
+
+  if (taskStatus && taskStatus !== 20000) {
+    throw new Error(`DataForSEO SERP: ${taskStatus} — ${task?.status_message ?? ""}`);
+  }
+
+  const items = task?.result?.[0]?.items ?? [];
+  const organic = items.filter((item: any) => item.type === "organic");
+
+  // Фильтруем только агрегаторы, но не исключаем "сам себя"
+  const competitors = organic
+    .filter((item: any) => !isAggregatorDomain(item.url ?? ""))
+    .slice(0, 10);
+
+  return competitors.map((item: any, index: number) => ({
+    domain: new URL(item.url).hostname,
+    position: index + 1,
+    title: item.title ?? "",
+    url: item.url ?? "",
+    snippet: item.description ?? "",
+  }));
 }
 
 // ─────────────────────────────────────────
 // KEYWORDS: данные по ключевым словам
 // ─────────────────────────────────────────
 
-export async function fetchKeywords(keywords: string[]): Promise<KeywordData[]> {
+export async function fetchKeywords(keywords: string[], locationCode = 2840): Promise<KeywordData[]> {
   if (keywords.length === 0) return [];
   if (USE_MOCK) return getMockKeywords(keywords);
+
+  const languageCode = LOCATION_LANGUAGE[locationCode] ?? "en";
 
   const response = await fetch(`${BASE_URL}/keywords_data/google_ads/search_volume/live`, {
     method: "POST",
@@ -131,8 +289,8 @@ export async function fetchKeywords(keywords: string[]): Promise<KeywordData[]> 
     body: JSON.stringify([
       {
         keywords,
-        location_code: 2840,
-        language_code: "en",
+        location_code: locationCode,
+        language_code: languageCode,
       },
     ]),
   });
@@ -210,7 +368,9 @@ export async function fetchDomainInfo(domains: string[]): Promise<DomainInfo[]> 
   const whoisMap: Record<string, string | null> = {};
   for (const task of whoisData?.tasks ?? []) {
     for (const item of task?.result ?? []) {
-      whoisMap[item.domain] = item.created_date ?? null;
+      const domain = item.domain ?? item.name;
+      const date = item.created_datetime ?? item.created_date ?? null;
+      if (domain) whoisMap[domain] = date;
     }
   }
 

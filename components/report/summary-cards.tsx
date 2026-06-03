@@ -11,17 +11,52 @@ function fmtMonths(months: number | null): string {
   return `${y} ${y === 1 ? "год" : y < 5 ? "года" : "лет"} ${m} мес.`;
 }
 
+function gapInsight(n: number): string {
+  if (n === 0) return "Семантика покрыта — явных пробелов не найдено";
+  if (n <= 5) return "Несколько тем которые стоит закрыть контентом";
+  if (n <= 20) return "Конкуренты ранжируются по темам которых у вас нет";
+  return "Большой пробел — конкуренты охватывают намного больше тем";
+}
+
+function quickWinsInsight(n: number): string {
+  if (n === 0) return "Пока нет страниц на грани топ-10 — начните с задач ниже";
+  if (n <= 3) return "Небольшие правки на этих страницах дадут быстрый результат";
+  return "Отличная возможность — эти страницы можно поднять быстро";
+}
+
+function trafficInsight(n: number): string {
+  if (n === 0) return "Нет данных для оценки потенциала";
+  if (n < 1000) return "Небольшая ниша — конкуренция ниже, проще занять топ";
+  if (n < 10000) return "Хороший объём — стоит бороться за эти позиции";
+  return "Этот трафик сейчас идёт к конкурентам, а не к вам";
+}
+
+function ageInsight(months: number | null): string {
+  if (months === null) return "Возраст конкурентов неизвестен";
+  if (months < 12) return "Ниша молодая — хорошие шансы занять топ";
+  if (months < 36) return "Конкуренты не старожилы — можно обойти качественным контентом";
+  if (months < 72) return "Конкуренты в топе давно — но их можно обойти контентом";
+  return "Сильные конкуренты — ставка на уникальность и экспертность";
+}
+
+function clicksInsight(clicks: number): string {
+  if (clicks === 0) return "Сайт пока не получает трафик из поиска — есть куда расти";
+  if (clicks < 100) return "Трафик минимальный — правильные правки дадут быстрый рост";
+  if (clicks < 1000) return "Есть базовый трафик — quick wins ускорят рост";
+  return "Хороший базовый трафик — оптимизация даст ощутимый прирост";
+}
+
 function MetricCard({
   icon: Icon,
   label,
   value,
-  sub,
+  insight,
   accent,
 }: {
   icon: React.ElementType;
   label: string;
   value: string;
-  sub?: string;
+  insight: string;
   accent?: string;
 }) {
   return (
@@ -31,7 +66,7 @@ function MetricCard({
           <div className="min-w-0">
             <p className="text-xs text-muted-foreground mb-1">{label}</p>
             <p className={`text-2xl font-bold tabular-nums leading-none ${accent ?? ""}`}>{value}</p>
-            {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+            <p className="text-xs text-muted-foreground mt-1.5 leading-snug">{insight}</p>
           </div>
           <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
             <Icon className="h-4 w-4 text-muted-foreground" />
@@ -54,27 +89,27 @@ export function SummaryCards({
       icon: TrendingUp,
       label: "Gap-ключей",
       value: summary.totalGapKeywords.toLocaleString(),
-      sub: "конкуренты ранжируются, мы нет",
+      insight: gapInsight(summary.totalGapKeywords),
       accent: summary.totalGapKeywords > 0 ? "text-blue-600 dark:text-blue-400" : undefined,
     },
     {
       icon: Zap,
       label: "Quick wins",
       value: summary.quickWinsCount.toLocaleString(),
-      sub: "позиции 5–20 в GSC",
+      insight: quickWinsInsight(summary.quickWinsCount),
       accent: summary.quickWinsCount > 0 ? "text-amber-600 dark:text-amber-400" : undefined,
     },
     {
       icon: Search,
       label: "Потенциал трафика",
       value: summary.trafficPotential.toLocaleString(),
-      sub: "volume топ-20 gap-ключей / мес",
+      insight: trafficInsight(summary.trafficPotential),
     },
     {
       icon: Clock,
       label: "Ср. возраст конкурентов",
       value: fmtMonths(summary.avgCompetitorDomainAgeMonths),
-      sub: "средний возраст домена",
+      insight: ageInsight(summary.avgCompetitorDomainAgeMonths),
     },
     ...(hasGsc
       ? [
@@ -82,7 +117,7 @@ export function SummaryCards({
             icon: MousePointerClick,
             label: "Кликов из GSC",
             value: summary.gscTotalClicks.toLocaleString(),
-            sub: `${summary.gscTotalQueries} запросов · ${summary.gscTotalImpressions.toLocaleString()} показов`,
+            insight: clicksInsight(summary.gscTotalClicks),
           },
         ]
       : []),
