@@ -718,9 +718,46 @@ ${quickWins || "Данных нет"}
 
   const text = message.content[0].type === "text" ? message.content[0].text : "";
   try {
-    return JSON.parse(stripJsonFences(text)) as QuickFix[];
+    const parsed = JSON.parse(stripJsonFences(text));
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed as QuickFix[];
+    // Haiku вернул пустой массив — генерируем минимальный набор из брифа
+    throw new Error("empty array");
   } catch {
-    return [];
+    // Fallback: базовые задачи из брифа которые всегда актуальны
+    const fallback: QuickFix[] = [
+      {
+        action: `Замените title на: "${brief.recommendedTitle}"`,
+        where: targetUrl,
+        effort: "5min",
+        why: "Title — первое что видит пользователь в выдаче. Правильный title увеличивает CTR.",
+        category: "meta",
+      },
+      {
+        action: `Замените H1 на: "${brief.recommendedH1}"`,
+        where: targetUrl,
+        effort: "5min",
+        why: "H1 задаёт тему страницы для Google. Должен содержать основной запрос.",
+        category: "meta",
+      },
+      {
+        action: `Обновите meta description: "${brief.recommendedMetaDescription}"`,
+        where: targetUrl,
+        effort: "5min",
+        why: "Описание показывается в сниппете — влияет на то, кликнут ли на вас.",
+        category: "meta",
+      },
+    ];
+    if (analytics.quickWins.length > 0) {
+      const win = analytics.quickWins[0];
+      fallback.push({
+        action: `Добавьте запрос "${win.query}" в текст страницы — он уже приносит ${win.impressions} показов`,
+        where: targetUrl,
+        effort: "30min",
+        why: `Страница на позиции ${win.position.toFixed(0)} — чуть доработать текст и можно попасть в топ-5.`,
+        category: "content",
+      });
+    }
+    return fallback;
   }
 }
 

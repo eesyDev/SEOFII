@@ -60,17 +60,56 @@ export async function processReport(reportId: string) {
       .map((s) => s?.trim())
       .find((s) => s && s.length > 3) ?? new URL(report.url).hostname;
 
-    const competitors = await fetchCompetitors(report.url, report.locationCode, serpQuery);
+    // Кеш DataForSEO SERP: берём конкурентов из последнего отчёта (≤7 дней) для того же URL
+    const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+    const cachedReport = await prisma.report.findFirst({
+      where: {
+        url: report.url,
+        locationCode: report.locationCode,
+        status: "DONE",
+        id: { not: reportId },
+        createdAt: { gte: new Date(Date.now() - CACHE_TTL_MS) },
+      },
+      include: { competitors: { orderBy: { position: "asc" } } },
+      orderBy: { createdAt: "desc" },
+    });
 
-    await prisma.competitor.createMany({
-      data: competitors.map((c) => ({
-        reportId,
+    let competitors: import("@/lib/dataforseo").SerpResult[];
+    let fromCache = false;
+
+    if (cachedReport && cachedReport.competitors.length > 0) {
+      competitors = cachedReport.competitors.map((c) => ({
         domain: c.domain,
         position: c.position,
         title: c.title,
         url: c.url,
-      })),
-    });
+        snippet: "",
+      }));
+      fromCache = true;
+      // Копируем конкурентов в новый отчёт
+      await prisma.competitor.createMany({
+        data: competitors.map((c) => ({
+          reportId,
+          domain: c.domain,
+          position: c.position,
+          title: c.title,
+          url: c.url,
+        })),
+      });
+    } else {
+      competitors = await fetchCompetitors(report.url, report.locationCode, serpQuery);
+      await prisma.competitor.createMany({
+        data: competitors.map((c) => ({
+          reportId,
+          domain: c.domain,
+          position: c.position,
+          title: c.title,
+          url: c.url,
+        })),
+      });
+    }
+
+    console.log(`[processReport] competitors: ${fromCache ? "from cache" : "from DataForSEO"} (${competitors.length})`);
 
     const compareCount = isPro ? 3 : 1;
     const topCompetitors = competitors.slice(0, compareCount);
@@ -86,7 +125,7 @@ export async function processReport(reportId: string) {
     // Таргет уже скрапнут выше (targetSnapshotPre), скрапим только конкурентов
     const competitorUrls = topCompetitors.map((c) => c.url);
     const [
-      [keywordData, domainInfo],
+      [_keywordData, domainInfo],
       compSnapshots,
       { target: targetSpeed, competitors: compSpeeds },
     ] = await Promise.all([
@@ -95,6 +134,21 @@ export async function processReport(reportId: string) {
       fetchPageSpeedsWithTimeout(report.url, competitorUrls),
     ]);
     const targetSnapshot = targetSnapshotPre;
+
+    // Кеш keywords: берём из последнего отчёта если есть
+    let keywordData = _keywordData;
+    if (fromCache && keywordData.length === 0) {
+      const cachedKeywords = await prisma.keyword.findMany({
+        where: { reportId: cachedReport!.id },
+        take: 30,
+      });
+      keywordData = cachedKeywords.map((k) => ({
+        keyword: k.keyword,
+        volume: k.volume,
+        cpc: Number(k.cpc),
+        competition: Number(k.competition),
+      }));
+    }
 
     if (keywordData.length > 0) {
       await prisma.keyword.createMany({
