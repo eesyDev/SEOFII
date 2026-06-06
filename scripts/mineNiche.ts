@@ -50,14 +50,19 @@ async function main() {
   const yandexCity = cityArg?.split("=")[1].toUpperCase() ?? "MOSCOW";
   const yandexLocationCode = YANDEX_LOCATIONS[yandexCity]?.code ?? YANDEX_LOCATIONS.MOSCOW.code;
 
+  const PAGE_TYPES = ["home", "service", "portfolio", "price", "article"];
   const niche = args[0];
-  const seedQueries = args.slice(1).filter((a) => !a.startsWith("--"));
+  const secondArg = args[1];
+  // Если второй аргумент — тип страницы, а не запрос
+  const pageType = PAGE_TYPES.includes(secondArg) ? secondArg : "home";
+  const queryStartIdx = PAGE_TYPES.includes(secondArg) ? 2 : 1;
+  const seedQueries = args.slice(queryStartIdx).filter((a) => !a.startsWith("--"));
 
   const sourceLabel = source === "yandex"
     ? `Яндекс (${YANDEX_LOCATIONS[yandexCity]?.label ?? yandexCity})`
     : `Google (location: ${locationCode})`;
 
-  console.log(`🚀 Начинаем добычу паттернов для ниши: "${niche}"`);
+  console.log(`🚀 Начинаем добычу паттернов для ниши: "${niche}" / тип: "${pageType}"`);
   console.log(`🌐 Источник: ${sourceLabel}`);
   console.log(`📋 Seed-запросы (${seedQueries.length}): ${seedQueries.join(", ")}`);
   console.log("");
@@ -151,7 +156,7 @@ async function main() {
 
   // 6. Сохраняем в БД
   console.log("\n💾 Сохраняем в базу...");
-  const savedCount = await savePatternsToDb(niche, result);
+  const savedCount = await savePatternsToDb(niche, result, pageType);
   console.log(`   ✅ Сохранено ${savedCount} паттернов со статусом "pending"`);
 
   console.log("\n🏁 Готово! Проверь результаты в Prisma Studio:");
