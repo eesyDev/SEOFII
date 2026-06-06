@@ -1,3 +1,7 @@
+import dotenv from "dotenv";
+import path from "path";
+dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
+
 /**
  * CLI-скрипт для добычи нишевых паттернов.
  *
@@ -7,9 +11,6 @@
  * Пример:
  *   npx tsx scripts/mineNiche.ts construction_repair "ремонт квартир москва" "отделка квартир под ключ"
  */
-
-import { config } from "dotenv";
-config({ path: [".env.local", ".env"] });
 
 import { prisma } from "../lib/prisma";
 import { fetchSerpResults, isAggregatorDomain } from "../lib/dataforseo";
@@ -113,7 +114,7 @@ async function main() {
 
   console.log(`   🔍 Проанализировано доменов: ${result.analyzedDomains.join(", ")}`);
   console.log(`   📦 Найдено паттернов: ${result.patterns.length}`);
-  console.log(`   🗑️ Отклонено (шум): ${result.rejected.join(", ") || "нет"}`);
+  console.log(`   🗑️ Отклонено (шум): ${result.rejected?.join(", ") || "нет"}`);
 
   if (result.patterns.length === 0) {
     console.log("\n⚠️ Gemini не нашёл повторяющихся паттернов. Попробуй другие seed-запросы.");
