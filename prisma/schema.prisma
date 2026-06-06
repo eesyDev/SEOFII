@@ -172,6 +172,7 @@ model NichePattern {
   niche       String
   pattern     String
   patternType String   @default("block")
+  pageType    String   @default("home")
   frequency   Float
   evidence    String[]
   confidence  String   @default("pending")
@@ -179,6 +180,6 @@ model NichePattern {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@index([niche, confidence, frequency])
+  @@index([niche, pageType, confidence, frequency])
   @@map("niche_patterns")
 }

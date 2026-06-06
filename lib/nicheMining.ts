@@ -231,12 +231,14 @@ export async function minePatternsFromNiche(
  */
 export async function savePatternsToDb(
   niche: string,
-  result: MiningResult
+  result: MiningResult,
+  pageType = "home"
 ): Promise<number> {
   const data = result.patterns.map((p) => ({
     niche,
     pattern: p.name,
     patternType: p.blockType,
+    pageType,
     frequency: p.frequency,
     evidence: p.evidence,
     confidence: "pending" as const,

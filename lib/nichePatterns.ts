@@ -1,5 +1,35 @@
 import { prisma } from "./prisma";
 
+// ─────────────────────────────────────────
+// PAGE TYPE
+// ─────────────────────────────────────────
+
+export type PageType = "home" | "service" | "portfolio" | "price" | "article" | "other";
+
+export function detectPageType(url: string): PageType {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    if (path === "/" || path === "" || path === "/index" || path === "/index.html") return "home";
+    if (/\/(uslugi|services?|service|услуг)/.test(path)) return "service";
+    if (/\/(portfolio|projects?|raboty|work|галере|портфол)/.test(path)) return "portfolio";
+    if (/\/(price|prices|ceny|stoimost|прайс|цен|стоимост)/.test(path)) return "price";
+    if (/\/(blog|article|articles|stati|news|post)/.test(path)) return "article";
+    return "other";
+  } catch {
+    return "home";
+  }
+}
+
+// Какие паттерны релевантны для каждого типа страницы
+const PAGE_TYPE_PATTERNS: Record<PageType, string[]> = {
+  home:      ["calculator", "team_profiles", "trust_badges", "reviews_testimonials", "portfolio_gallery", "cta_form", "social_proof_counter", "faq_section", "video_block"],
+  service:   ["price_table", "faq_section", "cta_form", "trust_badges", "portfolio_gallery", "comparison_table", "calculator", "reviews_testimonials"],
+  portfolio: ["portfolio_gallery", "reviews_testimonials", "social_proof_counter", "cta_form", "trust_badges"],
+  price:     ["price_table", "calculator", "comparison_table", "cta_form", "faq_section", "trust_badges"],
+  article:   ["faq_section", "lead_magnet", "cta_form", "reviews_testimonials"],
+  other:     ["calculator", "portfolio_gallery", "reviews_testimonials", "price_table", "cta_form", "trust_badges", "team_profiles", "faq_section"],
+};
+
 export interface PatternInsight {
   pattern: string;     // machine ID: "cost_calculator"
   label: string;       // "Калькулятор стоимости"
@@ -79,7 +109,8 @@ export async function getPatternInsights(
   existingBlocks: string[],
   siteType: string,
   targetKeyword?: string,
-  detectedBlocks: string[] = []
+  detectedBlocks: string[] = [],
+  pageType: PageType = "home"
 ): Promise<PatternInsight[]> {
   // Приоритетные типы паттернов для каждого типа сайта
   const priorityTypes =
@@ -106,15 +137,27 @@ export async function getPatternInsights(
     }
   }
 
-  // Если ниша не определена — берём все (fallback)
-  const dbPatterns = await prisma.nichePattern.findMany({
-    where: {
-      confidence: "approved",
-      ...(detectedNiche ? { niche: detectedNiche } : {}),
-    },
+  // Запрашиваем по niche + pageType, с fallback на home если нет данных для типа
+  const buildWhere = (pt: string) => ({
+    confidence: "approved",
+    pageType: pt,
+    ...(detectedNiche ? { niche: detectedNiche } : {}),
+  });
+
+  let dbPatterns = await prisma.nichePattern.findMany({
+    where: buildWhere(pageType),
     orderBy: [{ frequency: "desc" }],
     take: 50,
   });
+
+  // Fallback: если для этого pageType нет паттернов — берём home
+  if (dbPatterns.length === 0 && pageType !== "home") {
+    dbPatterns = await prisma.nichePattern.findMany({
+      where: buildWhere("home"),
+      orderBy: [{ frequency: "desc" }],
+      take: 50,
+    });
+  }
 
   if (dbPatterns.length === 0) return [];
 
@@ -171,5 +214,5 @@ export async function getPatternInsights(
     return b.frequency - a.frequency;
   });
 
-  return insights.slice(0, 15); // макс 15 паттернов
+  return insights.slice(0, 15);
 }
