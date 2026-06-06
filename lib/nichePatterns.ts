@@ -82,15 +82,35 @@ export async function getPatternInsights(
 
   if (dbPatterns.length === 0) return [];
 
-  // Убираем дубликаты по pattern — оставляем тот, что с высшей frequency
-  const seen = new Map<string, (typeof dbPatterns)[number]>();
+  // Шаг 1: дедупликация по machine ID
+  const seenById = new Map<string, (typeof dbPatterns)[number]>();
   for (const p of dbPatterns) {
-    const existing = seen.get(p.pattern);
+    const existing = seenById.get(p.pattern);
     if (!existing || p.frequency > existing.frequency) {
-      seen.set(p.pattern, p);
+      seenById.set(p.pattern, p);
     }
   }
-  const uniquePatterns = Array.from(seen.values());
+
+  // Шаг 2: дедупликация по первым 2 значимым словам label
+  const STOP = new Set(["и", "или", "для", "с", "в", "на", "по", "к", "из", "у", "о", "об", "а", "но", "их", "со"]);
+  const labelKey = (label: string) =>
+    label.toLowerCase()
+      .replace(/[^а-яёa-z0-9\s]/gi, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 1 && !STOP.has(w))
+      .slice(0, 2)
+      .join(" ");
+
+  const seenByLabel = new Map<string, (typeof dbPatterns)[number]>();
+  for (const p of seenById.values()) {
+    const label = extractLabel(p.context, p.pattern);
+    const key = labelKey(label);
+    const existing = seenByLabel.get(key);
+    if (!existing || p.frequency > existing.frequency) {
+      seenByLabel.set(key, p);
+    }
+  }
+  const uniquePatterns = Array.from(seenByLabel.values());
 
   const insights: PatternInsight[] = uniquePatterns.map((p) => {
     const label = extractLabel(p.context, p.pattern);

@@ -69,11 +69,23 @@ export const AGGREGATOR_DOMAINS = new Set([
 
 function isNonCompetitor(url: string, targetDomain: string): boolean {
   try {
-    const domain = new URL(url).hostname.replace(/^www\./, "");
-    if (domain === targetDomain) return true; // сам анализируемый сайт
+    const parsed = new URL(url);
+    const domain = parsed.hostname.replace(/^www\./, "");
+    const pathname = parsed.pathname.toLowerCase();
+
+    if (domain === targetDomain) return true;
     if (AGGREGATOR_DOMAINS.has(domain)) return true;
-    // рейтинговые сайты по паттернам
-    if (/rating|reiting|рейтинг|лучш|top\d|топ\d/.test(domain)) return true;
+
+    // Декодируем Punycode (xn--...) → unicode для проверки кириллицы
+    let decodedDomain = domain;
+    try { decodedDomain = new URL(`https://${domain}`).hostname; } catch {}
+
+    const aggregatorPattern = /rating|reiting|рейтинг|лучш|top\d|топ\d|каталог|catalog|otzyv|review/;
+    if (aggregatorPattern.test(decodedDomain)) return true;
+
+    // Проверяем путь — агрегаторы часто имеют /rating/, /catalog/, /top-
+    if (/\/rating\/|\/reiting\/|\/top-|\/catalog\/|\/otzyvy\//.test(pathname)) return true;
+
     return false;
   } catch {
     return false;
