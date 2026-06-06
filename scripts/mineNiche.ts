@@ -13,14 +13,17 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
  */
 
 import { prisma } from "../lib/prisma";
-import { fetchSerpResults, isAggregatorDomain } from "../lib/dataforseo";
+import { fetchSerpResults, fetchYandexSerpResults, isAggregatorDomain, YANDEX_LOCATIONS } from "../lib/dataforseo";
 import { scrapePages } from "../lib/scraper";
 import { htmlToMiningMarkdown } from "../lib/markdownClean";
 import { minePatternsFromNiche, savePatternsToDb } from "../lib/nicheMining";
 import type { CleanedPage } from "../lib/markdownClean";
 
 // По умолчанию Казахстан (русскоязычная выдача).
-// Для других стран передай 3-м аргументом: US, UK, KZ, UA, DE, FR
+// Для других стран передай --location=US вторым аргументом после slug
+const LOCATION_MAP: Record<string, number> = {
+  US: 2840, UK: 2826, DE: 2276, FR: 2250, KZ: 2398, UA: 2804,
+};
 const DEFAULT_LOCATION = 2398;
 
 async function main() {
@@ -36,10 +39,26 @@ async function main() {
     process.exit(1);
   }
 
+  const locationArg = args.find((a) => a.startsWith("--location="));
+  const sourceArg = args.find((a) => a.startsWith("--source="));
+  const cityArg = args.find((a) => a.startsWith("--city="));
+
+  const source = sourceArg?.split("=")[1] ?? "google";
+  const locationCode = locationArg
+    ? (LOCATION_MAP[locationArg.split("=")[1].toUpperCase()] ?? DEFAULT_LOCATION)
+    : DEFAULT_LOCATION;
+  const yandexCity = cityArg?.split("=")[1].toUpperCase() ?? "MOSCOW";
+  const yandexLocationCode = YANDEX_LOCATIONS[yandexCity]?.code ?? YANDEX_LOCATIONS.MOSCOW.code;
+
   const niche = args[0];
-  const seedQueries = args.slice(1);
+  const seedQueries = args.slice(1).filter((a) => !a.startsWith("--"));
+
+  const sourceLabel = source === "yandex"
+    ? `Яндекс (${YANDEX_LOCATIONS[yandexCity]?.label ?? yandexCity})`
+    : `Google (location: ${locationCode})`;
 
   console.log(`🚀 Начинаем добычу паттернов для ниши: "${niche}"`);
+  console.log(`🌐 Источник: ${sourceLabel}`);
   console.log(`📋 Seed-запросы (${seedQueries.length}): ${seedQueries.join(", ")}`);
   console.log("");
 
@@ -50,7 +69,9 @@ async function main() {
   for (const query of seedQueries) {
     console.log(`🔍 SERP для: "${query}"`);
     try {
-      const competitors = await fetchSerpResults(query, DEFAULT_LOCATION);
+      const competitors = source === "yandex"
+        ? await fetchYandexSerpResults(query, yandexLocationCode)
+        : await fetchSerpResults(query, locationCode);
       for (const c of competitors) {
         if (!isAggregatorDomain(c.url)) {
           allUrls.add(c.url);

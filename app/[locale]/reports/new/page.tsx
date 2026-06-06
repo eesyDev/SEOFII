@@ -16,41 +16,73 @@ export default function NewReportPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [gscRows, setGscRows] = useState<GscRow[] | null>(null);
-  const [gscFileName, setGscFileName] = useState("");
+  const [gscFileNames, setGscFileNames] = useState<string[]>([]);
   const [gscError, setGscError] = useState("");
   const [showNoGscWarning, setShowNoGscWarning] = useState(false);
-  const [locationCode, setLocationCode] = useState(2840); // US по умолчанию (DataForSEO не поддерживает RU)
+  const [locationCode, setLocationCode] = useState(2840);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setGscError("");
-    setGscRows(null);
-    setGscFileName(file.name);
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const { rows, debugInfo } = parseGscCsvDetailed(text);
-      if (rows.length === 0) {
-        setGscError(
-          debugInfo
-            ? `Не удалось прочитать файл: ${debugInfo}`
-            : "Не удалось прочитать файл. Убедись, что это экспорт из GSC (Запросы → Экспорт → CSV)."
-        );
-        setGscFileName("");
-      } else {
-        setGscRows(rows);
+  function mergeGscRows(allRows: GscRow[][]): GscRow[] {
+    const map = new Map<string, GscRow>();
+    for (const rows of allRows) {
+      for (const row of rows) {
+        const existing = map.get(row.query);
+        if (existing) {
+          // Мёржим: суммируем клики/показы, усредняем позицию и CTR
+          const totalImpressions = existing.impressions + row.impressions;
+          map.set(row.query, {
+            query: row.query,
+            clicks: existing.clicks + row.clicks,
+            impressions: totalImpressions,
+            ctr: totalImpressions > 0 ? (existing.clicks + row.clicks) / totalImpressions : 0,
+            position: (existing.position + row.position) / 2,
+          });
+        } else {
+          map.set(row.query, { ...row });
+        }
       }
-    };
-    reader.readAsText(file, "utf-8");
+    }
+    return Array.from(map.values()).sort((a, b) => b.impressions - a.impressions);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    setGscError("");
+
+    const promises = files.map(
+      (file) =>
+        new Promise<{ name: string; rows: GscRow[]; error?: string }>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const text = ev.target?.result as string;
+            const { rows, debugInfo } = parseGscCsvDetailed(text);
+            resolve({ name: file.name, rows, error: rows.length === 0 ? debugInfo : undefined });
+          };
+          reader.readAsText(file, "utf-8");
+        })
+    );
+
+    Promise.all(promises).then((results) => {
+      const errors = results.filter((r) => r.error);
+      const valid = results.filter((r) => r.rows.length > 0);
+
+      if (valid.length === 0) {
+        setGscError(errors[0]?.error ?? "Не удалось прочитать файл.");
+        return;
+      }
+      if (errors.length > 0) {
+        setGscError(`Не удалось прочитать: ${errors.map((e) => e.name).join(", ")}`);
+      }
+      const merged = mergeGscRows(valid.map((r) => r.rows));
+      setGscRows(merged);
+      setGscFileNames(valid.map((r) => r.name));
+    });
   }
 
   function clearGsc() {
     setGscRows(null);
-    setGscFileName("");
+    setGscFileNames([]);
     setGscError("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
@@ -153,31 +185,43 @@ export default function NewReportPage() {
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <Upload className="h-4 w-4 shrink-0" />
-                  <span>Нажми чтобы выбрать CSV файл</span>
+                  <span>Нажми чтобы выбрать CSV файл(ы)</span>
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept=".csv,text/csv"
+                    multiple
                     className="sr-only"
                     onChange={handleFileChange}
                     disabled={loading}
                   />
                 </div>
               ) : (
-                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm">
-                  <div className="flex items-center gap-2 text-foreground">
-                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                    <span className="font-medium">{gscFileName}</span>
-                    <span className="text-muted-foreground">— {gscRows.length} запросов</span>
+                <div className="rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-foreground">
+                      <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                      <span className="font-medium">{gscRows.length} запросов</span>
+                      <span className="text-muted-foreground">из {gscFileNames.length} файл{gscFileNames.length > 1 ? "ов" : "а"}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearGsc}
+                      className="text-muted-foreground hover:text-foreground transition-colors ml-2"
+                      aria-label="Удалить файлы"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={clearGsc}
-                    className="text-muted-foreground hover:text-foreground transition-colors ml-2"
-                    aria-label="Удалить файл"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  {gscFileNames.length > 1 && (
+                    <div className="flex flex-wrap gap-1">
+                      {gscFileNames.map((name, i) => (
+                        <span key={i} className="text-xs bg-muted rounded px-1.5 py-0.5 text-muted-foreground truncate max-w-[160px]">
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

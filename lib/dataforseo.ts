@@ -274,6 +274,77 @@ export async function fetchSerpResults(query: string, locationCode = 2840): Prom
 }
 
 // ─────────────────────────────────────────
+// YANDEX SERP: для русскоязычных ниш (Москва, СПб и др.)
+// Яндекс поддерживает гео-привязку к конкретным городам России
+// ─────────────────────────────────────────
+
+// Geo ID Яндекса (отличаются от Google location_code)
+export const YANDEX_LOCATIONS: Record<string, { code: number; label: string }> = {
+  MOSCOW:  { code: 213,  label: "Москва" },
+  SPB:     { code: 2,    label: "Санкт-Петербург" },
+  RU:      { code: 225,  label: "Россия (вся)" },
+  EKATERINBURG: { code: 54, label: "Екатеринбург" },
+  NOVOSIBIRSK:  { code: 65, label: "Новосибирск" },
+};
+
+export async function fetchYandexSerpResults(
+  query: string,
+  locationCode = 213
+): Promise<SerpResult[]> {
+  if (USE_MOCK) {
+    return Array.from({ length: 10 }, (_, i) => ({
+      domain: `competitor${i + 1}.ru`,
+      position: i + 1,
+      title: `Результат ${i + 1} для "${query}"`,
+      url: `https://competitor${i + 1}.ru/page`,
+      snippet: `Сниппет для запроса "${query}"`,
+    }));
+  }
+
+  const response = await fetch(`${BASE_URL}/serp/yandex/organic/live/advanced`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify([
+      {
+        keyword: query,
+        location_code: locationCode,
+        language_code: "ru",
+        depth: 10,
+      },
+    ]),
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try { const body = await response.json(); detail = JSON.stringify(body).slice(0, 200); } catch {}
+    throw new Error(`DataForSEO Yandex SERP error: ${response.status}${detail ? " — " + detail : ""}`);
+  }
+
+  const data = await response.json();
+  const task = data?.tasks?.[0];
+  const taskStatus = task?.status_code;
+
+  if (taskStatus && taskStatus !== 20000) {
+    throw new Error(`DataForSEO Yandex: ${taskStatus} — ${task?.status_message ?? ""}`);
+  }
+
+  const items = task?.result?.[0]?.items ?? [];
+  const organic = items.filter((item: any) => item.type === "organic");
+
+  const competitors = organic
+    .filter((item: any) => !isAggregatorDomain(item.url ?? ""))
+    .slice(0, 10);
+
+  return competitors.map((item: any, index: number) => ({
+    domain: new URL(item.url).hostname,
+    position: index + 1,
+    title: item.title ?? "",
+    url: item.url ?? "",
+    snippet: item.description ?? "",
+  }));
+}
+
+// ─────────────────────────────────────────
 // KEYWORDS: данные по ключевым словам
 // ─────────────────────────────────────────
 
@@ -306,7 +377,7 @@ export async function fetchKeywords(keywords: string[], locationCode = 2840): Pr
     keyword: item.keyword ?? "",
     volume: item.search_volume ?? 0,
     cpc: item.cpc ?? 0,
-    competition: item.competition ?? 0,
+    competition: typeof item.competition === "number" ? item.competition : 0,
   }));
 }
 

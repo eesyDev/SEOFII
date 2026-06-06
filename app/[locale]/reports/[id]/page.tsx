@@ -27,6 +27,7 @@ import { BlockMatrixSection } from "@/components/report/block-matrix";
 import { SpeedCard } from "@/components/report/speed-card";
 import { ReadyContentSection, ReadyContentLocked } from "@/components/report/ready-content";
 import { PrintButton } from "@/components/report/PrintButton";
+import { ReportProgress } from "@/components/report/report-progress";
 import { SchemaSection } from "@/components/report/schema-section";
 import { PageStructureSection } from "@/components/report/page-structure";
 import { NichePatternsSection } from "@/components/report/niche-patterns";
@@ -158,13 +159,8 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       {/* В процессе */}
       {(report.status === "PENDING" || report.status === "PROCESSING") && (
         <Card>
-          <CardContent className="flex flex-col items-center py-12 text-center gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="font-medium">Генерируем отчёт...</p>
-            <p className="text-sm text-muted-foreground max-w-sm">
-              Анализируем конкурентов, скорость страниц и ключевые слова. Обычно 1–2 минуты.
-            </p>
-            <p className="text-xs text-muted-foreground">Страница обновится автоматически</p>
+          <CardContent className="pt-6 pb-4 px-6">
+            <ReportProgress />
           </CardContent>
         </Card>
       )}
