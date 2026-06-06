@@ -4,6 +4,8 @@ import { generateSEOBrief, generateComparisons, generateBlockMatrix, generateQui
 import type { SchemaResult } from "@/lib/claude";
 import { generateSchemaWithGemini, analyzePageWithGemini } from "@/lib/gemini";
 import type { PageStructureAnalysis } from "@/lib/gemini";
+import { getPatternInsights } from "@/lib/nichePatterns";
+import type { PatternInsight } from "@/lib/nichePatterns";
 import { computeAnalytics } from "@/lib/analytics";
 import { scrapePages } from "@/lib/scraper";
 import { fetchPageSpeeds } from "@/lib/pagespeed";
@@ -137,6 +139,10 @@ export async function processReport(reportId: string) {
       isPro ? generateReadyContent(report.url, brief, siteType) : Promise.resolve(null),
     ]);
 
+    // Паттерны ниши — сравниваем с реальными блоками на странице
+    const existingBlocks = pageStructure?.existingBlocks ?? targetSnapshot.detectedBlocks;
+    const nichePatterns = await getPatternInsights(existingBlocks, siteType);
+
     const compCost = comparisons.length * 0.015;
     const costUsd = briefCost + compCost + 0.01;
 
@@ -153,6 +159,7 @@ export async function processReport(reportId: string) {
       quickFixes,
       schemaResult,
       pageStructure,
+      nichePatterns,
       readyContent,
       competitors,
       pageSpeed,

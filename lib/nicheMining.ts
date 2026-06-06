@@ -35,6 +35,7 @@ interface MiningResult {
     rationale: string;
     blockType: "conversion" | "trust" | "content" | "technical" | "navigation";
   }>;
+  rejected?: string[];
 }
 
 async function getApprovedExamples(niche: string, limit = 8): Promise<string> {
@@ -123,7 +124,7 @@ function getMockResult(niche: string, pages: CleanedPage[]): MiningResult {
         rationale: "Попадание в блок People Also Ask Google, снижение нагрузки на менеджеров",
         blockType: "content",
       },
-    ].filter((p) => p.frequency >= 0.3),
+    ].filter((p) => p.frequency >= 0.3) as MiningResult["patterns"],
     rejected: ["cookie_banner", "footer_links", "social_share"],
   };
 }

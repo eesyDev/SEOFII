@@ -29,8 +29,10 @@ import { ReadyContentSection, ReadyContentLocked } from "@/components/report/rea
 import { PrintButton } from "@/components/report/PrintButton";
 import { SchemaSection } from "@/components/report/schema-section";
 import { PageStructureSection } from "@/components/report/page-structure";
+import { NichePatternsSection } from "@/components/report/niche-patterns";
 import type { SchemaResult } from "@/lib/claude";
 import type { PageStructureAnalysis } from "@/lib/gemini";
+import type { PatternInsight } from "@/lib/nichePatterns";
 
 // ─────────────────────────────────────────
 // ТИПЫ
@@ -49,6 +51,7 @@ interface ReportResult {
   readyContent?: import("@/lib/claude").ReadyContent | null;
   schemaResult?: SchemaResult | null;
   pageStructure?: PageStructureAnalysis | null;
+  nichePatterns?: PatternInsight[] | null;
 }
 
 const STATUS_CONFIG = {
@@ -104,6 +107,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const readyContent = result?.readyContent ?? null;
   const schemaResult = result?.schemaResult as SchemaResult | null ?? null;
   const pageStructure = result?.pageStructure as PageStructureAnalysis | null ?? null;
+  const nichePatterns = result?.nichePatterns as PatternInsight[] | null ?? null;
   const gscRows     = (report.gscData as GscRow[] | null) ?? [];
   const hasGsc      = gscRows.length > 0;
   const isFree      = !user?.isAdmin && (!user || user.plan === "FREE");
@@ -192,6 +196,9 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
                 ? <QuickFixesSection quickFixes={quickFixes} />
                 : <EmptyTab text="Создайте новый отчёт чтобы увидеть список задач" />
               }
+              {nichePatterns && nichePatterns.length > 0 && (
+                <NichePatternsSection patterns={nichePatterns} />
+              )}
               {blockMatrix.length > 0 && (
                 <BlockMatrixSection
                   blockMatrix={blockMatrix}
