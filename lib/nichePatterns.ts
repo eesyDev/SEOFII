@@ -42,7 +42,8 @@ function isPresent(label: string, pattern: string, existingBlocks: string[]): bo
 
 export async function getPatternInsights(
   existingBlocks: string[],
-  siteType: string
+  siteType: string,
+  targetKeyword?: string
 ): Promise<PatternInsight[]> {
   // Приоритетные типы паттернов для каждого типа сайта
   const priorityTypes =
@@ -52,15 +53,46 @@ export async function getPatternInsights(
       ? ["trust", "conversion", "content", "technical", "navigation"]
       : ["content", "trust", "conversion", "technical", "navigation"];
 
+  // Определяем нишу по ключевому слову (простая эвристика)
+  const keyword = (targetKeyword ?? "").toLowerCase();
+  const nicheMap: Record<string, string[]> = {
+    construction_repair: ["ремонт", "отделка", "строительство"],
+    dental: ["стоматолог", "зуб", "имплант", "винир"],
+    lawyers: ["юрист", "адвокат", "развод", "наследство"],
+    auto_service: ["автосервис", "ремонт двигателя", "шиномонтаж", "диагностика"],
+  };
+
+  let detectedNiche: string | undefined;
+  for (const [niche, words] of Object.entries(nicheMap)) {
+    if (words.some((w) => keyword.includes(w))) {
+      detectedNiche = niche;
+      break;
+    }
+  }
+
+  // Если ниша не определена — берём все (fallback)
   const dbPatterns = await prisma.nichePattern.findMany({
-    where: { confidence: "approved" },
+    where: {
+      confidence: "approved",
+      ...(detectedNiche ? { niche: detectedNiche } : {}),
+    },
     orderBy: [{ frequency: "desc" }],
-    take: 30,
+    take: 50,
   });
 
   if (dbPatterns.length === 0) return [];
 
-  const insights: PatternInsight[] = dbPatterns.map((p) => {
+  // Убираем дубликаты по pattern — оставляем тот, что с высшей frequency
+  const seen = new Map<string, (typeof dbPatterns)[number]>();
+  for (const p of dbPatterns) {
+    const existing = seen.get(p.pattern);
+    if (!existing || p.frequency > existing.frequency) {
+      seen.set(p.pattern, p);
+    }
+  }
+  const uniquePatterns = Array.from(seen.values());
+
+  const insights: PatternInsight[] = uniquePatterns.map((p) => {
     const label = extractLabel(p.context, p.pattern);
     const rationale = extractRationale(p.context);
     const present = isPresent(label, p.pattern, existingBlocks);
@@ -83,5 +115,5 @@ export async function getPatternInsights(
     return b.frequency - a.frequency;
   });
 
-  return insights;
+  return insights.slice(0, 15); // макс 15 паттернов
 }
