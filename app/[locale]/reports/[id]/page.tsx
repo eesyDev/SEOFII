@@ -160,7 +160,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       {(report.status === "PENDING" || report.status === "PROCESSING") && (
         <Card>
           <CardContent className="pt-6 pb-4 px-6">
-            <ReportProgress />
+            <ReportProgress startedAt={report.createdAt.toISOString()} />
           </CardContent>
         </Card>
       )}

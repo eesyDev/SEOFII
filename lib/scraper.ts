@@ -76,6 +76,12 @@ function detectBlocks($: CheerioRoot, schemaTypes: string[], bodyText: string): 
   if (/\d{3,}[\s+]*(клиент|покупател|заказ|пользовател|customer|order)/i.test(bodyText))
     blocks.push("social_proof");
 
+  // Команда / специалисты
+  if (
+    hasClass("team", "staff", "команда", "специалист", "master", "мастер") ||
+    /наша команда|специалисты|персонал|наши мастера|бригада/i.test(bodyText)
+  ) blocks.push("team");
+
   // Калькулятор / конфигуратор
   if (
     hasClass("calculator", "configurator", "calc", "конфигур", "калькул") ||

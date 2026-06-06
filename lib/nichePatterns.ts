@@ -22,9 +22,28 @@ function extractRationale(context: string | null): string {
   return colonIdx > 0 ? context.slice(colonIdx + 1).trim() : context;
 }
 
-// Проверяем присутствует ли паттерн среди существующих блоков
-// Сравниваем label/pattern с existingBlocks через простой нормализованный contains
-function isPresent(label: string, pattern: string, existingBlocks: string[]): boolean {
+// Маппинг scraper-эвристик → человеческие слова для isPresent
+const BLOCK_SYNONYMS: Record<string, string[]> = {
+  reviews: ["отзыв", "рейтинг", "testimonial"],
+  faq: ["faq", "вопрос", "ответ", "аккордеон"],
+  video: ["видео", "youtube", "vimeo"],
+  price: ["цена", "стоимость", "прайс", "тариф"],
+  comparison_table: ["сравнен", "таблиц", "характеристик"],
+  gallery: ["галерея", "портфолио", "работы", "проекты", "фото"],
+  social_proof: ["клиент", "заказ", "пользовател", "цифр", "счётчик"],
+  calculator: ["калькулятор", "расчёт", "смета", "конфигур"],
+  map: ["карта", "адрес", "местоположение"],
+  form: ["форма", "заявка", "обратная связь", "контакт"],
+  chat: ["чат", "консультант", "jivo"],
+  team: ["команда", "специалист", "мастер", "персонал", "бригада", "staff"],
+};
+
+function isPresent(
+  label: string,
+  pattern: string,
+  existingBlocks: string[],
+  detectedBlocks: string[] = []
+): boolean {
   const normalize = (s: string) => s.toLowerCase()
     .replace(/[_\-\/]/g, " ")
     .replace(/ё/g, "е");
@@ -32,18 +51,35 @@ function isPresent(label: string, pattern: string, existingBlocks: string[]): bo
   const targets = [normalize(label), normalize(pattern)];
   const blocks = existingBlocks.map(normalize);
 
-  return targets.some((target) =>
+  // Проверяем AI-блоки
+  const aiMatch = targets.some((target) =>
     blocks.some((block) => {
       const targetWords = target.split(/\s+/).filter((w) => w.length > 3);
       return targetWords.some((word) => block.includes(word));
     })
   );
+  if (aiMatch) return true;
+
+  // Проверяем scraper-эвристики через синонимы
+  const normalizedLabel = normalize(label);
+  const normalizedPattern = normalize(pattern);
+  for (const [blockId, synonyms] of Object.entries(BLOCK_SYNONYMS)) {
+    if (!detectedBlocks.includes(blockId)) continue;
+    for (const syn of synonyms) {
+      if (normalizedLabel.includes(syn) || normalizedPattern.includes(syn)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 export async function getPatternInsights(
   existingBlocks: string[],
   siteType: string,
-  targetKeyword?: string
+  targetKeyword?: string,
+  detectedBlocks: string[] = []
 ): Promise<PatternInsight[]> {
   // Приоритетные типы паттернов для каждого типа сайта
   const priorityTypes =
@@ -115,7 +151,7 @@ export async function getPatternInsights(
   const insights: PatternInsight[] = uniquePatterns.map((p) => {
     const label = extractLabel(p.context, p.pattern);
     const rationale = extractRationale(p.context);
-    const present = isPresent(label, p.pattern, existingBlocks);
+    const present = isPresent(label, p.pattern, existingBlocks, detectedBlocks);
     return {
       pattern: p.pattern,
       label,

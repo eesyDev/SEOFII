@@ -14,41 +14,38 @@ const STEPS = [
   { label: "Формируем рекомендации", duration: 15 },
 ];
 
-export function ReportProgress() {
-  const [elapsed, setElapsed] = useState(0);
-  const [currentStep, setCurrentStep] = useState(0);
+const TOTAL = STEPS.reduce((s, st) => s + st.duration, 0);
+
+interface Props {
+  startedAt: string; // ISO timestamp отчёта из БД
+}
+
+export function ReportProgress({ startedAt }: Props) {
+  const [elapsed, setElapsed] = useState(() =>
+    Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
+  );
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setElapsed((e) => e + 1);
+      setElapsed(Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [startedAt]);
 
-  useEffect(() => {
-    let acc = 0;
-    for (let i = 0; i < STEPS.length; i++) {
-      acc += STEPS[i].duration;
-      if (elapsed < acc) {
-        setCurrentStep(i);
-        return;
-      }
-    }
-    setCurrentStep(STEPS.length - 1);
-  }, [elapsed]);
+  let acc = 0;
+  let currentStep = STEPS.length - 1;
+  for (let i = 0; i < STEPS.length; i++) {
+    acc += STEPS[i].duration;
+    if (elapsed < acc) { currentStep = i; break; }
+  }
 
-  const totalDuration = STEPS.reduce((s, st) => s + st.duration, 0);
-  const progress = Math.min((elapsed / totalDuration) * 100, 95);
-
+  const progress = Math.min((elapsed / TOTAL) * 100, 95);
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
-  const timeLabel = minutes > 0
-    ? `${minutes}м ${seconds}с`
-    : `${seconds}с`;
+  const timeLabel = minutes > 0 ? `${minutes}м ${seconds}с` : `${seconds}с`;
 
   return (
     <div className="space-y-6 py-4">
-      {/* Прогресс-бар */}
       <div className="space-y-2">
         <div className="flex justify-between text-xs text-muted-foreground">
           <span>Генерируем отчёт...</span>
@@ -62,7 +59,6 @@ export function ReportProgress() {
         </div>
       </div>
 
-      {/* Шаги */}
       <div className="space-y-2.5">
         {STEPS.map((step, i) => {
           const isDone = i < currentStep;

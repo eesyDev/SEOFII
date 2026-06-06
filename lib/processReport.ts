@@ -195,7 +195,7 @@ export async function processReport(reportId: string) {
 
     // Паттерны ниши — сравниваем с реальными блоками на странице
     const existingBlocks = pageStructure?.existingBlocks ?? targetSnapshot.detectedBlocks;
-    const nichePatterns = await getPatternInsights(existingBlocks, siteType, brief.targetKeyword);
+    const nichePatterns = await getPatternInsights(existingBlocks, siteType, brief.targetKeyword, targetSnapshot.detectedBlocks);
 
     const compCost = comparisons.length * 0.015;
     const costUsd = briefCost + compCost + 0.01;
