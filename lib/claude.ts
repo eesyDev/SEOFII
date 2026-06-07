@@ -6,6 +6,8 @@ import type { SerpResult, KeywordData, DomainInfo } from "./dataforseo";
 import type { AnalyticsResult } from "./analytics";
 import type { GscRow } from "./gsc";
 import type { PageSnapshot, SiteType } from "./scraper";
+import type { MissingTerm } from "./termAnalyzer";
+import { extractExcerpt } from "./termAnalyzer";
 
 const USE_MOCK = !process.env.ANTHROPIC_API_KEY;
 
@@ -392,6 +394,41 @@ const SITE_TYPE_CONTEXT: Record<SiteType, string> = {
 Фокус брифа: LocalBusiness schema, NAP (имя/адрес/телефон), карта и часы работы, отзывы с привязкой к местоположению, ключи с гео-уточнениями, Google Business Profile.`,
 };
 
+function buildMissingTermsBlock(terms: MissingTerm[]): string {
+  if (terms.length === 0) return "";
+  const list = terms
+    .map((t) => `- "${t.term}": у конкурентов ${t.competitorFreq}x/стр (${t.competitorCount} из ${t.competitorCount} сайтов), у клиента — ${t.targetFreq}x`)
+    .join("\n");
+  return `
+ТЕРМИНЫ КОНКУРЕНТОВ КОТОРЫХ НЕТ У КЛИЕНТА (TF-IDF анализ):
+Это слова которые топ-конкуренты используют регулярно, а на анализируемой странице они редки или отсутствуют.
+Включи эти термины в topKeywordsToInclude и в contentStructure — укажи где именно их использовать.
+
+${list}
+`;
+}
+
+function buildExcerptsBlock(competitors: SerpResult[], compSnapshots: PageSnapshot[]): string {
+  const excerpts = compSnapshots
+    .map((snap, i) => {
+      const comp = competitors[i];
+      if (!comp || snap.fetchError) return null;
+      const text = extractExcerpt(snap.rawHtml);
+      if (!text) return null;
+      return `${comp.domain} (позиция ${comp.position}): "${text}"`;
+    })
+    .filter(Boolean);
+
+  if (excerpts.length === 0) return "";
+  return `
+КАК ПИШУТ КОНКУРЕНТЫ (реальные фрагменты их текстов):
+Используй эти примеры чтобы понять tone и конкретность которой не хватает клиенту.
+В contentStructure и additionalRecommendations ссылайся на конкретные формулировки.
+
+${excerpts.join("\n")}
+`;
+}
+
 export async function generateSEOBrief(
   targetUrl: string,
   competitors: SerpResult[],
@@ -401,7 +438,8 @@ export async function generateSEOBrief(
   gscRows: GscRow[] = [],
   siteType: SiteType = "content",
   targetSnapshot?: PageSnapshot,
-  compSnapshots: PageSnapshot[] = []
+  compSnapshots: PageSnapshot[] = [],
+  missingTerms: MissingTerm[] = []
 ): Promise<{ brief: SEOBrief; costUsd: number }> {
   if (USE_MOCK) return getMockBrief(targetUrl, competitors);
 
@@ -509,6 +547,8 @@ ${competitorList}
 
 КЛЮЧЕВЫЕ СЛОВА (только с реальным объёмом поиска):
 ${keywordList}
+${buildMissingTermsBlock(missingTerms)}
+${buildExcerptsBlock(competitors, compSnapshots)}
 ${gscBlock}
 Верни JSON строго по схеме ниже. Без markdown-обёртки.
 

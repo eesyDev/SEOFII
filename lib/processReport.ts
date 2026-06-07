@@ -9,6 +9,8 @@ import { getPatternInsights, detectPageType } from "@/lib/nichePatterns";
 import type { PatternInsight } from "@/lib/nichePatterns";
 import { detectNiche } from "@/lib/nicheDetector";
 import { accumulatePatterns } from "@/lib/patternAccumulator";
+import { analyzeMissingTerms } from "@/lib/termAnalyzer";
+import type { MissingTerm } from "@/lib/termAnalyzer";
 import { computeAnalytics } from "@/lib/analytics";
 import { scrapePages } from "@/lib/scraper";
 import { fetchPageSpeeds } from "@/lib/pagespeed";
@@ -169,12 +171,15 @@ export async function processReport(reportId: string) {
 
     const siteType = targetSnapshot.siteType;
 
+    // Вычисляем пропущенные термины синхронно — чистая CPU работа, ~5ms
+    const missingTerms: MissingTerm[] = analyzeMissingTerms(targetSnapshot, compSnapshots);
+
     // Бриф параллельно с comparisons+blockMatrix — brief не зависит от snapshots
     const [
       { brief, costUsd: briefCost },
       [comparisons, blockMatrix],
     ] = await Promise.all([
-      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType, targetSnapshot, compSnapshots),
+      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType, targetSnapshot, compSnapshots, missingTerms),
       Promise.all([
         generateComparisons(targetSnapshot, compSnapshots, topCompetitors),
         generateBlockMatrix(targetSnapshot, compSnapshots, topCompetitors, siteType),
@@ -229,6 +234,7 @@ export async function processReport(reportId: string) {
       schemaResult,
       pageStructure,
       nichePatterns,
+      missingTerms,
       readyContent,
       competitors,
       pageSpeed,
