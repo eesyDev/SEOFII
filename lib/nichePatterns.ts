@@ -110,7 +110,8 @@ export async function getPatternInsights(
   siteType: string,
   targetKeyword?: string,
   detectedBlocks: string[] = [],
-  pageType: PageType = "home"
+  pageType: PageType = "home",
+  detectedNiche?: string
 ): Promise<PatternInsight[]> {
   // Приоритетные типы паттернов для каждого типа сайта
   const priorityTypes =
@@ -120,28 +121,13 @@ export async function getPatternInsights(
       ? ["trust", "conversion", "content", "technical", "navigation"]
       : ["content", "trust", "conversion", "technical", "navigation"];
 
-  // Определяем нишу по ключевому слову (простая эвристика)
-  const keyword = (targetKeyword ?? "").toLowerCase();
-  const nicheMap: Record<string, string[]> = {
-    construction_repair: ["ремонт", "отделка", "строительство"],
-    dental: ["стоматолог", "зуб", "имплант", "винир"],
-    lawyers: ["юрист", "адвокат", "развод", "наследство"],
-    auto_service: ["автосервис", "ремонт двигателя", "шиномонтаж", "диагностика"],
-  };
-
-  let detectedNiche: string | undefined;
-  for (const [niche, words] of Object.entries(nicheMap)) {
-    if (words.some((w) => keyword.includes(w))) {
-      detectedNiche = niche;
-      break;
-    }
-  }
+  const niche = detectedNiche && detectedNiche !== "general" ? detectedNiche : undefined;
 
   // Запрашиваем по niche + pageType, с fallback на home если нет данных для типа
   const buildWhere = (pt: string) => ({
     confidence: "approved",
     pageType: pt,
-    ...(detectedNiche ? { niche: detectedNiche } : {}),
+    ...(niche ? { niche } : {}),
   });
 
   let dbPatterns = await prisma.nichePattern.findMany({
@@ -150,10 +136,14 @@ export async function getPatternInsights(
     take: 50,
   });
 
-  // Fallback: если для этого pageType нет паттернов — берём home
+  // Fallback: если для этого pageType нет паттернов — берём home,
+  // но фильтруем только релевантные для текущего типа страницы
   if (dbPatterns.length === 0 && pageType !== "home") {
     dbPatterns = await prisma.nichePattern.findMany({
-      where: buildWhere("home"),
+      where: {
+        ...buildWhere("home"),
+        pattern: { in: PAGE_TYPE_PATTERNS[pageType] },
+      },
       orderBy: [{ frequency: "desc" }],
       take: 50,
     });

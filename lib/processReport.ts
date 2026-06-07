@@ -4,8 +4,11 @@ import { generateSEOBrief, generateComparisons, generateBlockMatrix, generateQui
 import type { SchemaResult } from "@/lib/claude";
 import { generateSchemaWithGemini, analyzePageWithGemini } from "@/lib/gemini";
 import type { PageStructureAnalysis } from "@/lib/gemini";
+import { buildSchemaGraph } from "@/lib/schemaBuilder";
 import { getPatternInsights, detectPageType } from "@/lib/nichePatterns";
 import type { PatternInsight } from "@/lib/nichePatterns";
+import { detectNiche } from "@/lib/nicheDetector";
+import { accumulatePatterns } from "@/lib/patternAccumulator";
 import { computeAnalytics } from "@/lib/analytics";
 import { scrapePages } from "@/lib/scraper";
 import { fetchPageSpeeds } from "@/lib/pagespeed";
@@ -182,23 +185,31 @@ export async function processReport(reportId: string) {
       domainInfo.map((d) => [d.domain, { domainAge: d.domainAge, referringDomains: d.referringDomains }])
     );
 
-    const [quickFixes, schemaResult, pageStructure, readyContent] = await Promise.all([
+    const [quickFixes, pageStructure, readyContent] = await Promise.all([
       generateQuickFixes(report.url, brief, comparisons, analytics, siteType),
-      generateSchemaWithGemini(
-        report.url, brief, siteType,
-        targetSnapshot.detectedBlocks,
-        targetSnapshot.schemaTypes
-      ),
       analyzePageWithGemini(report.url, competitorDomains),
       isPro ? generateReadyContent(report.url, brief, siteType) : Promise.resolve(null),
     ]);
 
-    // Паттерны ниши — сравниваем с реальными блоками на странице
+    // Тип страницы + схема + паттерны
     const pageType = detectPageType(report.url);
+    const schemaResult = buildSchemaGraph(report.url, targetSnapshot, brief, siteType, pageType);
     const existingBlocks = pageStructure?.existingBlocks ?? targetSnapshot.detectedBlocks;
+
+    const detectedNiche = detectNiche(
+      brief.targetKeyword ?? "",
+      competitors.map((c) => c.title),
+      siteType
+    );
+
+    // Fire-and-forget: накапливаем паттерны конкурентов в базу знаний ниш
+    accumulatePatterns(detectedNiche, pageType, compSnapshots).catch((err) =>
+      console.warn("[patternAccumulator] non-fatal error:", err)
+    );
+
     const nichePatterns = await getPatternInsights(
       existingBlocks, siteType, brief.targetKeyword,
-      targetSnapshot.detectedBlocks, pageType
+      targetSnapshot.detectedBlocks, pageType, detectedNiche
     );
 
     const compCost = comparisons.length * 0.015;
