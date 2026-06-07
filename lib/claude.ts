@@ -394,10 +394,10 @@ const SITE_TYPE_CONTEXT: Record<SiteType, string> = {
 Фокус брифа: LocalBusiness schema, NAP (имя/адрес/телефон), карта и часы работы, отзывы с привязкой к местоположению, ключи с гео-уточнениями, Google Business Profile.`,
 };
 
-function buildMissingTermsBlock(terms: MissingTerm[]): string {
+function buildMissingTermsBlock(terms: MissingTerm[], totalCompetitors: number): string {
   if (terms.length === 0) return "";
   const list = terms
-    .map((t) => `- "${t.term}": у конкурентов ${t.competitorFreq}x/стр (${t.competitorCount} из ${t.competitorCount} сайтов), у клиента — ${t.targetFreq}x`)
+    .map((t) => `- "${t.term}": у конкурентов ${t.competitorFreq}x/стр (${t.competitorCount} из ${totalCompetitors} сайтов), у клиента — ${t.targetFreq}x`)
     .join("\n");
   return `
 ТЕРМИНЫ КОНКУРЕНТОВ КОТОРЫХ НЕТ У КЛИЕНТА (TF-IDF анализ):
@@ -547,7 +547,7 @@ ${competitorList}
 
 КЛЮЧЕВЫЕ СЛОВА (только с реальным объёмом поиска):
 ${keywordList}
-${buildMissingTermsBlock(missingTerms)}
+${buildMissingTermsBlock(missingTerms, competitors.length)}
 ${buildExcerptsBlock(competitors, compSnapshots)}
 ${gscBlock}
 Верни JSON строго по схеме ниже. Без markdown-обёртки.
