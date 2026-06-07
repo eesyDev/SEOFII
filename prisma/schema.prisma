@@ -147,6 +147,23 @@ model Keyword {
   @@map("keywords")
 }
 
+model NichePattern {
+  id          String   @id @default(cuid())
+  niche       String
+  pattern     String
+  patternType String   @default("block")
+  frequency   Float
+  evidence    String[]
+  confidence  String   @default("pending")
+  context     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  pageType    String   @default("home")
+
+  @@index([niche, pageType, confidence, frequency])
+  @@map("niche_patterns")
+}
+
 enum Plan {
   FREE
   STARTER
@@ -165,21 +182,4 @@ enum ReportStatus {
   PROCESSING
   DONE
   FAILED
-}
-
-model NichePattern {
-  id          String   @id @default(cuid())
-  niche       String
-  pattern     String
-  patternType String   @default("block")
-  pageType    String   @default("home")
-  frequency   Float
-  evidence    String[]
-  confidence  String   @default("pending")
-  context     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([niche, pageType, confidence, frequency])
-  @@map("niche_patterns")
 }
