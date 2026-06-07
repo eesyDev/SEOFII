@@ -47,12 +47,15 @@ export async function POST(req: NextRequest) {
     const { tasks } = await import("@trigger.dev/sdk/v3");
     await tasks.trigger("generate-report", { reportId: report.id });
   } else {
+    // Запускаем в фоне — НЕ ждём завершения.
+    // Это критично: если пользователь уходит со страницы, HTTP-соединение закрывается
+    // и await processReport() отменился бы вместе с ним. setImmediate отвязывает от запроса.
     const { processReport } = await import("@/lib/processReport");
-    try {
-      await processReport(report.id);
-    } catch {
-      // processReport уже сохранил статус FAILED в БД — просто редиректим на страницу отчёта
-    }
+    setImmediate(() => {
+      processReport(report.id).catch((err) => {
+        console.error(`[processReport] failed for ${report.id}:`, err);
+      });
+    });
   }
 
   return NextResponse.json({ reportId: report.id });

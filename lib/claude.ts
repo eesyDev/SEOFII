@@ -6,6 +6,8 @@ import type { SerpResult, KeywordData, DomainInfo } from "./dataforseo";
 import type { AnalyticsResult } from "./analytics";
 import type { GscRow } from "./gsc";
 import type { PageSnapshot, SiteType } from "./scraper";
+import type { MissingTerm } from "./termAnalyzer";
+import { extractExcerpt } from "./termAnalyzer";
 
 const USE_MOCK = !process.env.ANTHROPIC_API_KEY;
 
@@ -392,6 +394,41 @@ const SITE_TYPE_CONTEXT: Record<SiteType, string> = {
 Фокус брифа: LocalBusiness schema, NAP (имя/адрес/телефон), карта и часы работы, отзывы с привязкой к местоположению, ключи с гео-уточнениями, Google Business Profile.`,
 };
 
+function buildMissingTermsBlock(terms: MissingTerm[], totalCompetitors: number): string {
+  if (terms.length === 0) return "";
+  const list = terms
+    .map((t) => `- "${t.term}": у конкурентов ${t.competitorFreq}x/стр (${t.competitorCount} из ${totalCompetitors} сайтов), у клиента — ${t.targetFreq}x`)
+    .join("\n");
+  return `
+ТЕРМИНЫ КОНКУРЕНТОВ КОТОРЫХ НЕТ У КЛИЕНТА (TF-IDF анализ):
+Это слова которые топ-конкуренты используют регулярно, а на анализируемой странице они редки или отсутствуют.
+Включи эти термины в topKeywordsToInclude и в contentStructure — укажи где именно их использовать.
+
+${list}
+`;
+}
+
+function buildExcerptsBlock(competitors: SerpResult[], compSnapshots: PageSnapshot[]): string {
+  const excerpts = compSnapshots
+    .map((snap, i) => {
+      const comp = competitors[i];
+      if (!comp || snap.fetchError) return null;
+      const text = extractExcerpt(snap.rawHtml);
+      if (!text) return null;
+      return `${comp.domain} (позиция ${comp.position}): "${text}"`;
+    })
+    .filter(Boolean);
+
+  if (excerpts.length === 0) return "";
+  return `
+КАК ПИШУТ КОНКУРЕНТЫ (реальные фрагменты их текстов):
+Используй эти примеры чтобы понять tone и конкретность которой не хватает клиенту.
+В contentStructure и additionalRecommendations ссылайся на конкретные формулировки.
+
+${excerpts.join("\n")}
+`;
+}
+
 export async function generateSEOBrief(
   targetUrl: string,
   competitors: SerpResult[],
@@ -400,28 +437,47 @@ export async function generateSEOBrief(
   analytics?: AnalyticsResult,
   gscRows: GscRow[] = [],
   siteType: SiteType = "content",
-  targetSnapshot?: PageSnapshot
+  targetSnapshot?: PageSnapshot,
+  compSnapshots: PageSnapshot[] = [],
+  missingTerms: MissingTerm[] = []
 ): Promise<{ brief: SEOBrief; costUsd: number }> {
   if (USE_MOCK) return getMockBrief(targetUrl, competitors);
 
   const domainMap = new Map(domainInfo.map((d) => [d.domain, d]));
 
+  // Строим блок конкурентов с реальными данными страниц (H2/H3 + блоки)
   const competitorList = competitors
-    .map((c) => {
+    .map((c, idx) => {
       const di = domainMap.get(c.domain);
-      const meta = di
-        ? `   Возраст: ${di.domainAge ?? "н/д"} | Бэклинки: ${di.backlinks.toLocaleString()} | RD: ${di.referringDomains.toLocaleString()}`
+      const snap = compSnapshots[idx];
+      const domainMeta = di
+        ? `Возраст: ${di.domainAge ?? "н/д"} | RD: ${di.referringDomains.toLocaleString()}`
         : "";
-      return `${c.position}. ${c.title}\n   URL: ${c.url}\n   Snippet: ${c.snippet || "н/д"}${meta ? "\n" + meta : ""}`;
+      const pageData = snap && !snap.fetchError
+        ? [
+            `Слов: ${snap.wordCount}`,
+            snap.headings.length > 0 ? `H2/H3: ${snap.headings.slice(0, 8).join(" | ")}` : "",
+            snap.detectedBlocks.length > 0 ? `Блоки: ${snap.detectedBlocks.join(", ")}` : "",
+            snap.hasSchema ? `Schema: ${snap.schemaTypes.join(", ")}` : "Schema: нет",
+          ].filter(Boolean).join("\n   ")
+        : "";
+      return [
+        `${c.position}. ${c.title}`,
+        `   URL: ${c.url}`,
+        `   Snippet: ${c.snippet || "н/д"}`,
+        domainMeta ? `   ${domainMeta}` : "",
+        pageData ? `   ${pageData}` : "",
+      ].filter(Boolean).join("\n");
     })
     .join("\n\n");
 
+  // Только ключи с реальным объёмом > 0
   const keywordList = keywords
+    .filter((k) => k.volume > 0)
     .slice(0, 20)
-    .map((k) => `- ${k.keyword}: объём ${k.volume}, CPC $${k.cpc}, конкуренция ${k.competition}`)
-    .join("\n");
+    .map((k) => `- "${k.keyword}": ${k.volume}/мес, CPC $${k.cpc}`)
+    .join("\n") || "нет данных по объёму";
 
-  // GSC-контекст для промпта
   let gscBlock = "";
   if (analytics && gscRows.length > 0) {
     const top3 = analytics.allKeywords
@@ -432,28 +488,26 @@ export async function generateSEOBrief(
 
     const quickWinsList = analytics.quickWins
       .slice(0, 10)
-      .map((r) => `- "${r.query}": позиция ${r.position.toFixed(1)}, ${r.impressions} показов/мес, ${r.clicks} кликов`)
+      .map((r) => `- "${r.query}": позиция ${r.position.toFixed(1)}, ${r.impressions} показов/мес`)
       .join("\n");
 
     const gapList = analytics.gapKeywords
       .slice(0, 15)
-      .map((k) => `- "${k.keyword}" (volume: ${k.volume}, у ${k.occurrences} конкурентов в топе)`)
+      .map((k) => `- "${k.keyword}" (${k.volume}/мес, у ${k.occurrences} конкурентов в топе)`)
       .join("\n");
 
     gscBlock = `
 ДАННЫЕ GOOGLE SEARCH CONSOLE:
-Всего запросов в GSC: ${gscRows.length}, кликов: ${analytics.summary.gscTotalClicks.toLocaleString()}, показов: ${analytics.summary.gscTotalImpressions.toLocaleString()}
+Запросов: ${gscRows.length} | Кликов: ${analytics.summary.gscTotalClicks.toLocaleString()} | Показов: ${analytics.summary.gscTotalImpressions.toLocaleString()}
 
-Уже в топ-4 (укрепить позиции):
+Уже в топ-4 (удержать и укрепить):
 ${top3 || "нет данных"}
 
-Quick Wins — позиции 5–20 (приоритет доработки):
+Quick Wins — позиции 5–20 (приоритет #1 для доработки):
 ${quickWinsList || "нет данных"}
 
-Gap-ключи — конкуренты ранжируются, у нас нет:
+Семантические пробелы — конкуренты ранжируются, у нас нет этих страниц:
 ${gapList || "нет данных"}
-
-УЧТИ ЭТИ ДАННЫЕ В БРИФЕ: упомяни quick wins как приоритеты доработки, gap-ключи — как новые темы для охвата. Для top-3 ключей предложи как удержать и улучшить позиции.
 `;
   }
 
@@ -466,81 +520,90 @@ ${gapList || "нет данных"}
       ? targetSnapshot.headings.map((h) => `  - ${h}`).join("\n")
       : "  нет данных";
     targetPageBlock = `
-ЧТО УЖЕ ЕСТЬ НА АНАЛИЗИРУЕМОЙ СТРАНИЦЕ (результат скрапинга):
-- Title: ${targetSnapshot.title || "н/д"}
-- H1: ${targetSnapshot.h1 || "н/д"}
-- Кол-во слов: ${targetSnapshot.wordCount}
-- Разделы (H2/H3):
+ТЕКУЩЕЕ СОСТОЯНИЕ АНАЛИЗИРУЕМОЙ СТРАНИЦЫ:
+- Title: ${targetSnapshot.title || "отсутствует"}
+- H1: ${targetSnapshot.h1 || "отсутствует"}
+- Слов: ${targetSnapshot.wordCount}
+- H2/H3 разделы:
 ${headings}
-- Обнаруженные блоки: ${blocks}
+- Блоки на странице: ${blocks}
 - Schema.org: ${targetSnapshot.schemaTypes.length > 0 ? targetSnapshot.schemaTypes.join(", ") : "нет"}
-
-ВАЖНО: при формировании contentGaps НЕ рекомендуй создавать страницы или блоки, которые уже есть на сайте согласно данным выше.
 `;
   }
 
-  const prompt = `Ты — опытный SEO-специалист. На основе анализа конкурентов создай детальное ТЗ для копирайтера.
+  const prompt = `Ты — SEO-эксперт с опытом работы в рунете. Твоя задача — не шаблонный аудит, а конкретный план для этой конкретной страницы.
+
+ГЛАВНОЕ ПРАВИЛО: Каждая рекомендация должна основываться на реальных данных из этого промпта.
+- Плохо: "Добавьте FAQ-раздел"
+- Хорошо: "art-a.ru (позиция 1) имеет FAQ с разделами 'Сколько стоит / Как долго / Что входит' — у вас этого нет, добавьте минимум 6 вопросов на эту тему"
+- Не рекомендуй то, что уже есть на странице согласно данным ниже.
 
 АНАЛИЗИРУЕМАЯ СТРАНИЦА: ${targetUrl}
 
 ${SITE_TYPE_CONTEXT[siteType]}
 ${targetPageBlock}
-ТОП-10 КОНКУРЕНТОВ В ВЫДАЧЕ (с заголовками и сниппетами из поиска):
+КОНКУРЕНТЫ — РЕАЛЬНЫЕ ДАННЫЕ СТРАНИЦ (заголовки, структура, блоки):
 ${competitorList}
 
-КЛЮЧЕВЫЕ СЛОВА:
+КЛЮЧЕВЫЕ СЛОВА (только с реальным объёмом поиска):
 ${keywordList}
+${buildMissingTermsBlock(missingTerms, competitors.length)}
+${buildExcerptsBlock(competitors, compSnapshots)}
 ${gscBlock}
-Создай структурированное SEO ТЗ в формате JSON со следующими полями:
+Верни JSON строго по схеме ниже. Без markdown-обёртки.
 
-1. Основные SEO-параметры:
-- targetKeyword: основной ключевой запрос
-- recommendedTitle: рекомендуемый title (до 60 символов)
-- recommendedMetaDescription: рекомендуемый meta description (до 155 символов)
-- recommendedH1: рекомендуемый заголовок H1
-- contentStructure: массив разделов [{title, content}] — структура статьи
-- wordCountRecommendation: рекомендуемое кол-во слов
-- topKeywordsToInclude: массив ключевых слов для включения в текст
-- competitorInsights: краткий анализ конкурентов
-- additionalRecommendations: массив дополнительных рекомендаций
+{
+  "targetKeyword": "главный поисковый запрос страницы",
+  "recommendedTitle": "title до 60 символов — конкретный, с запросом и отличием от конкурентов",
+  "recommendedMetaDescription": "до 155 символов — конкретный призыв, не шаблон",
+  "recommendedH1": "H1 — конкретный, с гео и ключом если нужно",
 
-2. E-E-A-T анализ (eeatAnalysis):
-Проанализируй сниппеты и URL конкурентов на предмет сигналов Experience, Expertise, Authoritativeness, Trustworthiness.
+  "contentStructure": [
+    {
+      "title": "Название раздела (H2)",
+      "content": "Что написать в этом разделе — конкретно: объём, о чём, почему (со ссылкой на конкурента у которого это есть или которого нет)"
+    }
+  ],
 
-eeatAnalysis должен содержать:
-- experience: { score: 1-10, signals: string[], gaps: string[] }
-  (Опыт: упоминания реальных кейсов, личных тестов, «мы проверили», конкретных результатов)
-- expertise: { score: 1-10, signals: string[], gaps: string[] }
-  (Экспертиза: биографии авторов, регалии, профессиональная терминология, ссылки на исследования)
-- authoritativeness: { score: 1-10, signals: string[], gaps: string[] }
-  (Авторитетность: упоминания в медиа, партнёрства, отраслевые награды, цитирование другими)
-- trustworthiness: { score: 1-10, signals: string[], gaps: string[] }
-  (Доверие: HTTPS, прозрачность методологии, дата обновления, контакты, источники)
-- overallScore: средний балл (1-10)
-- summary: краткий вывод об уровне E-E-A-T у конкурентов и возможностях для отстройки
-- recommendations: массив конкретных рекомендаций для копирайтера как усилить E-E-A-T (5-7 пунктов)
+  "wordCountRecommendation": 2500,
 
-3. Стратегия линкбилдинга (linkBuildingStrategy):
-На основе возраста доменов, количества бэклинков и referring domains конкурентов сформируй рекомендации по наращиванию ссылочной массы.
+  "topKeywordsToInclude": ["только ключи из списка выше с реальным объёмом > 0"],
 
-linkBuildingStrategy должен содержать:
-- summary: краткий анализ ссылочного профиля конкурентов и что нужно для конкуренции (2–3 предложения)
-- targetDR: целевой диапазон DR/DA ссылающихся доменов (например "30–60")
-- recommendations: массив из 3–5 объектов { type, description, priority: "high"|"medium"|"low", examples: string[] }
-  (type — метод получения ссылок: гостевые посты, niche edits, HARO, цифровой PR и т.д.)
-- anchorTextStrategy: рекомендация по анкорам (доли брендовых / общих / ключевых)
+  "competitorInsights": "2-3 предложения: кто лидер, за счёт чего, в чём главный разрыв с анализируемым сайтом",
 
-4. Контентные пробелы (contentGaps):
-На основе URL и заголовков конкурентов выяви темы/страницы, которые присутствуют у нескольких конкурентов, но отсутствуют у анализируемого сайта.
+  "additionalRecommendations": [
+    "Конкретная рекомендация со ссылкой на данные — позицию, конкурента, объём запроса"
+  ],
 
-contentGaps — массив из 4–6 объектов:
-- topic: название темы/страницы (конкретное, для копирайтера)
-- suggestedSlug: предлагаемый URL-slug страницы (например /blog/seo-audit-checklist)
-- priority: "high" | "medium" | "low" (по потенциалу трафика и частоте у конкурентов)
-- trafficPotential: примерная оценка трафика в месяц (например "500–2000 посещений/мес")
-- rationale: 1–2 предложения почему эту страницу стоит создать
+  "eeatAnalysis": {
+    "experience": { "score": 1-10, "signals": ["что есть у конкурентов"], "gaps": ["чего нет у анализируемого сайта"] },
+    "expertise": { "score": 1-10, "signals": [], "gaps": [] },
+    "authoritativeness": { "score": 1-10, "signals": [], "gaps": [] },
+    "trustworthiness": { "score": 1-10, "signals": [], "gaps": [] },
+    "overallScore": 6,
+    "summary": "Вывод об E-E-A-T на основе реальных данных конкурентов",
+    "recommendations": ["Конкретное действие для усиления E-E-A-T"]
+  },
 
-Отвечай ТОЛЬКО JSON, без markdown-обёртки.`;
+  "contentGaps": [
+    {
+      "topic": "Конкретная тема/страница которой нет у анализируемого сайта но есть у 2+ конкурентов",
+      "suggestedSlug": "/url-slug",
+      "priority": "high|medium|low",
+      "trafficPotential": "оценка на основе объёмов ключей выше или GSC-данных",
+      "rationale": "Кто из конкурентов имеет эту страницу и какой запрос она закрывает — конкретно"
+    }
+  ],
+
+  "linkBuildingStrategy": {
+    "summary": "2 предложения на основе реальных RD конкурентов из данных выше",
+    "targetDR": "диапазон DR",
+    "recommendations": [
+      { "type": "метод", "description": "описание", "priority": "high|medium|low", "examples": ["пример"] }
+    ],
+    "anchorTextStrategy": "рекомендация по анкорам"
+  }
+}`;
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
@@ -718,9 +781,46 @@ ${quickWins || "Данных нет"}
 
   const text = message.content[0].type === "text" ? message.content[0].text : "";
   try {
-    return JSON.parse(stripJsonFences(text)) as QuickFix[];
+    const parsed = JSON.parse(stripJsonFences(text));
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed as QuickFix[];
+    // Haiku вернул пустой массив — генерируем минимальный набор из брифа
+    throw new Error("empty array");
   } catch {
-    return [];
+    // Fallback: базовые задачи из брифа которые всегда актуальны
+    const fallback: QuickFix[] = [
+      {
+        action: `Замените title на: "${brief.recommendedTitle}"`,
+        where: targetUrl,
+        effort: "5min",
+        why: "Title — первое что видит пользователь в выдаче. Правильный title увеличивает CTR.",
+        category: "meta",
+      },
+      {
+        action: `Замените H1 на: "${brief.recommendedH1}"`,
+        where: targetUrl,
+        effort: "5min",
+        why: "H1 задаёт тему страницы для Google. Должен содержать основной запрос.",
+        category: "meta",
+      },
+      {
+        action: `Обновите meta description: "${brief.recommendedMetaDescription}"`,
+        where: targetUrl,
+        effort: "5min",
+        why: "Описание показывается в сниппете — влияет на то, кликнут ли на вас.",
+        category: "meta",
+      },
+    ];
+    if (analytics.quickWins.length > 0) {
+      const win = analytics.quickWins[0];
+      fallback.push({
+        action: `Добавьте запрос "${win.query}" в текст страницы — он уже приносит ${win.impressions} показов`,
+        where: targetUrl,
+        effort: "30min",
+        why: `Страница на позиции ${win.position.toFixed(0)} — чуть доработать текст и можно попасть в топ-5.`,
+        category: "content",
+      });
+    }
+    return fallback;
   }
 }
 

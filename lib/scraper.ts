@@ -76,6 +76,12 @@ function detectBlocks($: CheerioRoot, schemaTypes: string[], bodyText: string): 
   if (/\d{3,}[\s+]*(клиент|покупател|заказ|пользовател|customer|order)/i.test(bodyText))
     blocks.push("social_proof");
 
+  // Команда / специалисты
+  if (
+    hasClass("team", "staff", "команда", "специалист", "master", "мастер") ||
+    /наша команда|специалисты|персонал|наши мастера|бригада/i.test(bodyText)
+  ) blocks.push("team");
+
   // Калькулятор / конфигуратор
   if (
     hasClass("calculator", "configurator", "calc", "конфигур", "калькул") ||
@@ -117,11 +123,21 @@ function detectSiteType(
 
   const localScore = [
     schemaTypes.some((t) =>
-      ["LocalBusiness", "Restaurant", "Store", "MedicalBusiness", "AutoDealer", "Hotel"].includes(t)
+      ["LocalBusiness", "Restaurant", "Store", "MedicalBusiness", "AutoDealer", "Hotel",
+       "HomeAndConstructionBusiness", "GeneralContractor", "ProfessionalService",
+       "RoofingContractor", "HVACBusiness", "Plumber", "Electrician"].includes(t)
     ),
     detectedBlocks.includes("map"),
     /режим работы|часы работы|пн[–-]пт|мы находимся|наш адрес/i.test(bodyText),
     $("address").length > 0,
+    // телефон — сигнал локального бизнеса
+    /\+7[\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}|8[\s-]?800/i.test(bodyText),
+    // упоминание города
+    /санкт-петербург|москва|краснодар|новосибирск|екатеринбург|\bспб\b|\bмск\b|по городу|выезд мастера/i.test(bodyText),
+    // сервисные CTA
+    /оставить заявку|заказать звонок|рассчитать стоимость|получить смету|вызвать мастера/i.test(bodyText),
+    // форма + цена = локальный сервис
+    detectedBlocks.includes("form") && detectedBlocks.includes("price"),
   ].filter(Boolean).length;
 
   if (ecommScore >= 2) return "ecommerce";

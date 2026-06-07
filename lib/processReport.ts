@@ -4,6 +4,13 @@ import { generateSEOBrief, generateComparisons, generateBlockMatrix, generateQui
 import type { SchemaResult } from "@/lib/claude";
 import { generateSchemaWithGemini, analyzePageWithGemini } from "@/lib/gemini";
 import type { PageStructureAnalysis } from "@/lib/gemini";
+import { buildSchemaGraph } from "@/lib/schemaBuilder";
+import { getPatternInsights, detectPageType } from "@/lib/nichePatterns";
+import type { PatternInsight } from "@/lib/nichePatterns";
+import { detectNiche } from "@/lib/nicheDetector";
+import { accumulatePatterns } from "@/lib/patternAccumulator";
+import { analyzeMissingTerms } from "@/lib/termAnalyzer";
+import type { MissingTerm } from "@/lib/termAnalyzer";
 import { computeAnalytics } from "@/lib/analytics";
 import { scrapePages } from "@/lib/scraper";
 import { fetchPageSpeeds } from "@/lib/pagespeed";
@@ -58,17 +65,56 @@ export async function processReport(reportId: string) {
       .map((s) => s?.trim())
       .find((s) => s && s.length > 3) ?? new URL(report.url).hostname;
 
-    const competitors = await fetchCompetitors(report.url, report.locationCode, serpQuery);
+    // Кеш DataForSEO SERP: берём конкурентов из последнего отчёта (≤7 дней) для того же URL
+    const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+    const cachedReport = await prisma.report.findFirst({
+      where: {
+        url: report.url,
+        locationCode: report.locationCode,
+        status: "DONE",
+        id: { not: reportId },
+        createdAt: { gte: new Date(Date.now() - CACHE_TTL_MS) },
+      },
+      include: { competitors: { orderBy: { position: "asc" } } },
+      orderBy: { createdAt: "desc" },
+    });
 
-    await prisma.competitor.createMany({
-      data: competitors.map((c) => ({
-        reportId,
+    let competitors: import("@/lib/dataforseo").SerpResult[];
+    let fromCache = false;
+
+    if (cachedReport && cachedReport.competitors.length > 0) {
+      competitors = cachedReport.competitors.map((c) => ({
         domain: c.domain,
         position: c.position,
         title: c.title,
         url: c.url,
-      })),
-    });
+        snippet: "",
+      }));
+      fromCache = true;
+      // Копируем конкурентов в новый отчёт
+      await prisma.competitor.createMany({
+        data: competitors.map((c) => ({
+          reportId,
+          domain: c.domain,
+          position: c.position,
+          title: c.title,
+          url: c.url,
+        })),
+      });
+    } else {
+      competitors = await fetchCompetitors(report.url, report.locationCode, serpQuery);
+      await prisma.competitor.createMany({
+        data: competitors.map((c) => ({
+          reportId,
+          domain: c.domain,
+          position: c.position,
+          title: c.title,
+          url: c.url,
+        })),
+      });
+    }
+
+    console.log(`[processReport] competitors: ${fromCache ? "from cache" : "from DataForSEO"} (${competitors.length})`);
 
     const compareCount = isPro ? 3 : 1;
     const topCompetitors = competitors.slice(0, compareCount);
@@ -84,7 +130,7 @@ export async function processReport(reportId: string) {
     // Таргет уже скрапнут выше (targetSnapshotPre), скрапим только конкурентов
     const competitorUrls = topCompetitors.map((c) => c.url);
     const [
-      [keywordData, domainInfo],
+      [_keywordData, domainInfo],
       compSnapshots,
       { target: targetSpeed, competitors: compSpeeds },
     ] = await Promise.all([
@@ -93,6 +139,21 @@ export async function processReport(reportId: string) {
       fetchPageSpeedsWithTimeout(report.url, competitorUrls),
     ]);
     const targetSnapshot = targetSnapshotPre;
+
+    // Кеш keywords: берём из последнего отчёта если есть
+    let keywordData = _keywordData;
+    if (fromCache && keywordData.length === 0) {
+      const cachedKeywords = await prisma.keyword.findMany({
+        where: { reportId: cachedReport!.id },
+        take: 30,
+      });
+      keywordData = cachedKeywords.map((k) => ({
+        keyword: k.keyword,
+        volume: k.volume,
+        cpc: Number(k.cpc),
+        competition: Number(k.competition),
+      }));
+    }
 
     if (keywordData.length > 0) {
       await prisma.keyword.createMany({
@@ -110,12 +171,15 @@ export async function processReport(reportId: string) {
 
     const siteType = targetSnapshot.siteType;
 
+    // Вычисляем пропущенные термины синхронно — чистая CPU работа, ~5ms
+    const missingTerms: MissingTerm[] = analyzeMissingTerms(targetSnapshot, compSnapshots);
+
     // Бриф параллельно с comparisons+blockMatrix — brief не зависит от snapshots
     const [
       { brief, costUsd: briefCost },
       [comparisons, blockMatrix],
     ] = await Promise.all([
-      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType, targetSnapshot),
+      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType, targetSnapshot, compSnapshots, missingTerms),
       Promise.all([
         generateComparisons(targetSnapshot, compSnapshots, topCompetitors),
         generateBlockMatrix(targetSnapshot, compSnapshots, topCompetitors, siteType),
@@ -126,16 +190,32 @@ export async function processReport(reportId: string) {
       domainInfo.map((d) => [d.domain, { domainAge: d.domainAge, referringDomains: d.referringDomains }])
     );
 
-    const [quickFixes, schemaResult, pageStructure, readyContent] = await Promise.all([
+    const [quickFixes, pageStructure, readyContent] = await Promise.all([
       generateQuickFixes(report.url, brief, comparisons, analytics, siteType),
-      generateSchemaWithGemini(
-        report.url, brief, siteType,
-        targetSnapshot.detectedBlocks,
-        targetSnapshot.schemaTypes
-      ),
       analyzePageWithGemini(report.url, competitorDomains),
       isPro ? generateReadyContent(report.url, brief, siteType) : Promise.resolve(null),
     ]);
+
+    // Тип страницы + схема + паттерны
+    const pageType = detectPageType(report.url);
+    const schemaResult = buildSchemaGraph(report.url, targetSnapshot, brief, siteType, pageType);
+    const existingBlocks = pageStructure?.existingBlocks ?? targetSnapshot.detectedBlocks;
+
+    const detectedNiche = detectNiche(
+      brief.targetKeyword ?? "",
+      competitors.map((c) => c.title),
+      siteType
+    );
+
+    // Fire-and-forget: накапливаем паттерны конкурентов в базу знаний ниш
+    accumulatePatterns(detectedNiche, pageType, compSnapshots).catch((err) =>
+      console.warn("[patternAccumulator] non-fatal error:", err)
+    );
+
+    const nichePatterns = await getPatternInsights(
+      existingBlocks, siteType, brief.targetKeyword,
+      targetSnapshot.detectedBlocks, pageType, detectedNiche
+    );
 
     const compCost = comparisons.length * 0.015;
     const costUsd = briefCost + compCost + 0.01;
@@ -153,6 +233,8 @@ export async function processReport(reportId: string) {
       quickFixes,
       schemaResult,
       pageStructure,
+      nichePatterns,
+      missingTerms,
       readyContent,
       competitors,
       pageSpeed,

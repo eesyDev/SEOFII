@@ -35,6 +35,7 @@ interface MiningResult {
     rationale: string;
     blockType: "conversion" | "trust" | "content" | "technical" | "navigation";
   }>;
+  rejected?: string[];
 }
 
 async function getApprovedExamples(niche: string, limit = 8): Promise<string> {
@@ -123,7 +124,7 @@ function getMockResult(niche: string, pages: CleanedPage[]): MiningResult {
         rationale: "Попадание в блок People Also Ask Google, снижение нагрузки на менеджеров",
         blockType: "content",
       },
-    ].filter((p) => p.frequency >= 0.3),
+    ].filter((p) => p.frequency >= 0.3) as MiningResult["patterns"],
     rejected: ["cookie_banner", "footer_links", "social_share"],
   };
 }
@@ -146,75 +147,83 @@ export async function minePatternsFromNiche(
 
   const ai = new GoogleGenAI({ apiKey: MINING_API_KEY });
 
-  const result = await ai.models.generateContent({
-    model: MINING_MODEL,
-    contents: prompt,
-    config: {
-      temperature: 0.1, // минимум креативности, максимум точности
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          niche: { type: Type.STRING },
-          analyzedDomains: { type: Type.ARRAY, items: { type: Type.STRING } },
-          patterns: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: {
-                  type: Type.STRING,
-                  enum: CORE_BLOCK_NAMES,
-                  description: "Строго из списка core blocks",
-                },
-                label: { type: Type.STRING },
-                evidence: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                  description: "Домены, где найден блок (только уверенные совпадения)",
-                },
-                rationale: { type: Type.STRING },
-                blockType: {
-                  type: Type.STRING,
-                  enum: ["conversion", "trust", "content", "technical", "navigation"],
-                },
-              },
-              required: ["name", "label", "evidence", "rationale", "blockType"],
+  const schema = {
+    type: Type.OBJECT,
+    properties: {
+      niche: { type: Type.STRING },
+      analyzedDomains: { type: Type.ARRAY, items: { type: Type.STRING } },
+      patterns: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING, enum: CORE_BLOCK_NAMES },
+            label: { type: Type.STRING },
+            evidence: { type: Type.ARRAY, items: { type: Type.STRING } },
+            rationale: { type: Type.STRING },
+            blockType: {
+              type: Type.STRING,
+              enum: ["conversion", "trust", "content", "technical", "navigation"],
             },
           },
+          required: ["name", "label", "evidence", "rationale", "blockType"],
         },
-        required: ["niche", "analyzedDomains", "patterns"],
       },
     },
-  });
-
-  const rawData = JSON.parse(result.text ?? "{}") as {
-    niche: string;
-    analyzedDomains: string[];
-    patterns: Array<{
-      name: string;
-      label: string;
-      evidence: string[];
-      rationale: string;
-      blockType: "conversion" | "trust" | "content" | "technical" | "navigation";
-    }>;
+    required: ["niche", "analyzedDomains", "patterns"],
   };
 
-  const totalSites = rawData.analyzedDomains.length || 1;
+  // Retry при 503 с fallback на gemini-2.0-flash
+  const modelsToTry = [MINING_MODEL, "gemini-2.0-flash"];
+  let lastError: unknown;
 
-  // Frequency считаем на бэкенде — LLM не умеет в математику
-  const patterns = rawData.patterns
-    .map((p) => ({
-      ...p,
-      frequency: Number((p.evidence.length / totalSites).toFixed(2)),
-    }))
-    .filter((p) => p.frequency >= 0.3); // фильтр шума на бэкенде
+  for (const model of modelsToTry) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (attempt > 0 || model !== MINING_MODEL) {
+          console.log(`  [retry] model=${model} attempt=${attempt + 1}`);
+          await new Promise((r) => setTimeout(r, (attempt + 1) * 5000));
+        }
+        const result = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            temperature: 0.1,
+            responseMimeType: "application/json",
+            responseSchema: schema,
+          },
+        });
 
-  return {
-    niche: rawData.niche,
-    analyzedDomains: rawData.analyzedDomains,
-    patterns,
-  };
+        const rawData = JSON.parse(result.text ?? "{}") as {
+          niche: string;
+          analyzedDomains: string[];
+          patterns: Array<{
+            name: string;
+            label: string;
+            evidence: string[];
+            rationale: string;
+            blockType: "conversion" | "trust" | "content" | "technical" | "navigation";
+          }>;
+        };
+
+        const totalSites = rawData.analyzedDomains.length || 1;
+        const patterns = rawData.patterns
+          .map((p) => ({
+            ...p,
+            frequency: Number((p.evidence.length / totalSites).toFixed(2)),
+          }))
+          .filter((p) => p.frequency >= 0.3);
+
+        return { niche: rawData.niche, analyzedDomains: rawData.analyzedDomains, patterns };
+      } catch (err: unknown) {
+        lastError = err;
+        const status = (err as { status?: number })?.status;
+        if (status !== 503 && status !== 429) throw err; // не ретраим на другие ошибки
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 /**
@@ -222,12 +231,14 @@ export async function minePatternsFromNiche(
  */
 export async function savePatternsToDb(
   niche: string,
-  result: MiningResult
+  result: MiningResult,
+  pageType = "home"
 ): Promise<number> {
   const data = result.patterns.map((p) => ({
     niche,
     pattern: p.name,
     patternType: p.blockType,
+    pageType,
     frequency: p.frequency,
     evidence: p.evidence,
     confidence: "pending" as const,

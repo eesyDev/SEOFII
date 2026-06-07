@@ -1,3 +1,7 @@
+import dotenv from "dotenv";
+import path from "path";
+dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
+
 /**
  * CLI-скрипт для добычи нишевых паттернов.
  *
@@ -8,18 +12,18 @@
  *   npx tsx scripts/mineNiche.ts construction_repair "ремонт квартир москва" "отделка квартир под ключ"
  */
 
-import { config } from "dotenv";
-config({ path: [".env.local", ".env"] });
-
 import { prisma } from "../lib/prisma";
-import { fetchSerpResults, isAggregatorDomain } from "../lib/dataforseo";
+import { fetchSerpResults, fetchYandexSerpResults, isAggregatorDomain, YANDEX_LOCATIONS } from "../lib/dataforseo";
 import { scrapePages } from "../lib/scraper";
 import { htmlToMiningMarkdown } from "../lib/markdownClean";
 import { minePatternsFromNiche, savePatternsToDb } from "../lib/nicheMining";
 import type { CleanedPage } from "../lib/markdownClean";
 
 // По умолчанию Казахстан (русскоязычная выдача).
-// Для других стран передай 3-м аргументом: US, UK, KZ, UA, DE, FR
+// Для других стран передай --location=US вторым аргументом после slug
+const LOCATION_MAP: Record<string, number> = {
+  US: 2840, UK: 2826, DE: 2276, FR: 2250, KZ: 2398, UA: 2804,
+};
 const DEFAULT_LOCATION = 2398;
 
 async function main() {
@@ -35,10 +39,31 @@ async function main() {
     process.exit(1);
   }
 
-  const niche = args[0];
-  const seedQueries = args.slice(1);
+  const locationArg = args.find((a) => a.startsWith("--location="));
+  const sourceArg = args.find((a) => a.startsWith("--source="));
+  const cityArg = args.find((a) => a.startsWith("--city="));
 
-  console.log(`🚀 Начинаем добычу паттернов для ниши: "${niche}"`);
+  const source = sourceArg?.split("=")[1] ?? "google";
+  const locationCode = locationArg
+    ? (LOCATION_MAP[locationArg.split("=")[1].toUpperCase()] ?? DEFAULT_LOCATION)
+    : DEFAULT_LOCATION;
+  const yandexCity = cityArg?.split("=")[1].toUpperCase() ?? "MOSCOW";
+  const yandexLocationCode = YANDEX_LOCATIONS[yandexCity]?.code ?? YANDEX_LOCATIONS.MOSCOW.code;
+
+  const PAGE_TYPES = ["home", "service", "portfolio", "price", "article"];
+  const niche = args[0];
+  const secondArg = args[1];
+  // Если второй аргумент — тип страницы, а не запрос
+  const pageType = PAGE_TYPES.includes(secondArg) ? secondArg : "home";
+  const queryStartIdx = PAGE_TYPES.includes(secondArg) ? 2 : 1;
+  const seedQueries = args.slice(queryStartIdx).filter((a) => !a.startsWith("--"));
+
+  const sourceLabel = source === "yandex"
+    ? `Яндекс (${YANDEX_LOCATIONS[yandexCity]?.label ?? yandexCity})`
+    : `Google (location: ${locationCode})`;
+
+  console.log(`🚀 Начинаем добычу паттернов для ниши: "${niche}" / тип: "${pageType}"`);
+  console.log(`🌐 Источник: ${sourceLabel}`);
   console.log(`📋 Seed-запросы (${seedQueries.length}): ${seedQueries.join(", ")}`);
   console.log("");
 
@@ -49,7 +74,9 @@ async function main() {
   for (const query of seedQueries) {
     console.log(`🔍 SERP для: "${query}"`);
     try {
-      const competitors = await fetchSerpResults(query, DEFAULT_LOCATION);
+      const competitors = source === "yandex"
+        ? await fetchYandexSerpResults(query, yandexLocationCode)
+        : await fetchSerpResults(query, locationCode);
       for (const c of competitors) {
         if (!isAggregatorDomain(c.url)) {
           allUrls.add(c.url);
@@ -113,7 +140,7 @@ async function main() {
 
   console.log(`   🔍 Проанализировано доменов: ${result.analyzedDomains.join(", ")}`);
   console.log(`   📦 Найдено паттернов: ${result.patterns.length}`);
-  console.log(`   🗑️ Отклонено (шум): ${result.rejected.join(", ") || "нет"}`);
+  console.log(`   🗑️ Отклонено (шум): ${result.rejected?.join(", ") || "нет"}`);
 
   if (result.patterns.length === 0) {
     console.log("\n⚠️ Gemini не нашёл повторяющихся паттернов. Попробуй другие seed-запросы.");
@@ -129,7 +156,7 @@ async function main() {
 
   // 6. Сохраняем в БД
   console.log("\n💾 Сохраняем в базу...");
-  const savedCount = await savePatternsToDb(niche, result);
+  const savedCount = await savePatternsToDb(niche, result, pageType);
   console.log(`   ✅ Сохранено ${savedCount} паттернов со статусом "pending"`);
 
   console.log("\n🏁 Готово! Проверь результаты в Prisma Studio:");

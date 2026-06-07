@@ -52,7 +52,7 @@ export function BlockMatrixSection({ blockMatrix, competitorDomains }: Props) {
             <thead>
               <tr className="border-b">
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground w-[38%]">Блок</th>
-                <th className="text-center py-2 px-2 font-medium text-muted-foreground w-[10%]">Вы</th>
+                <th className="text-center py-2 px-2 font-semibold text-primary w-[10%] border-x border-primary/20 bg-primary/5">Вы</th>
                 {colLabels.map((label, i) => (
                   <th key={i} className="text-center py-2 px-2 font-medium text-muted-foreground w-[10%] truncate max-w-[80px]" title={label}>
                     {label.length > 10 ? label.slice(0, 9) + "…" : label}
@@ -130,7 +130,7 @@ function BlockRow({ row, compCount }: { row: BlockRow; compCount: number }) {
           )}
         </div>
       </td>
-      <td className="py-2.5 px-2 text-center align-top">
+      <td className="py-2.5 px-2 text-center align-top border-x border-primary/20 bg-primary/5">
         <Cell value={row.yours} />
       </td>
       {Array.from({ length: compCount }).map((_, i) => (

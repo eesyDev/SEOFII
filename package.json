@@ -12,7 +12,8 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "trigger:dev": "npx trigger.dev@latest dev",
-    "mine:niche": "tsx scripts/mineNiche.ts"
+    "mine:niche": "DOTENV_CONFIG_PATH=.env.local node -r dotenv/config -r tsx scripts/mineNiche.ts",
+    "approve:patterns": "DOTENV_CONFIG_PATH=.env.local node -r dotenv/config -r tsx scripts/approvePatterns.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

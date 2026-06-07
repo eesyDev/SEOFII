@@ -27,10 +27,14 @@ import { BlockMatrixSection } from "@/components/report/block-matrix";
 import { SpeedCard } from "@/components/report/speed-card";
 import { ReadyContentSection, ReadyContentLocked } from "@/components/report/ready-content";
 import { PrintButton } from "@/components/report/PrintButton";
+import { ReportProgress } from "@/components/report/report-progress";
 import { SchemaSection } from "@/components/report/schema-section";
 import { PageStructureSection } from "@/components/report/page-structure";
+import { NichePatternsSection } from "@/components/report/niche-patterns";
 import type { SchemaResult } from "@/lib/claude";
 import type { PageStructureAnalysis } from "@/lib/gemini";
+import type { PatternInsight } from "@/lib/nichePatterns";
+import type { MissingTerm } from "@/lib/termAnalyzer";
 
 // ─────────────────────────────────────────
 // ТИПЫ
@@ -49,6 +53,8 @@ interface ReportResult {
   readyContent?: import("@/lib/claude").ReadyContent | null;
   schemaResult?: SchemaResult | null;
   pageStructure?: PageStructureAnalysis | null;
+  nichePatterns?: PatternInsight[] | null;
+  missingTerms?: MissingTerm[] | null;
 }
 
 const STATUS_CONFIG = {
@@ -104,6 +110,8 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const readyContent = result?.readyContent ?? null;
   const schemaResult = result?.schemaResult as SchemaResult | null ?? null;
   const pageStructure = result?.pageStructure as PageStructureAnalysis | null ?? null;
+  const nichePatterns = result?.nichePatterns as PatternInsight[] | null ?? null;
+  const missingTerms = result?.missingTerms as MissingTerm[] | null ?? null;
   const gscRows     = (report.gscData as GscRow[] | null) ?? [];
   const hasGsc      = gscRows.length > 0;
   const isFree      = !user?.isAdmin && (!user || user.plan === "FREE");
@@ -154,13 +162,8 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       {/* В процессе */}
       {(report.status === "PENDING" || report.status === "PROCESSING") && (
         <Card>
-          <CardContent className="flex flex-col items-center py-12 text-center gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="font-medium">Генерируем отчёт...</p>
-            <p className="text-sm text-muted-foreground max-w-sm">
-              Анализируем конкурентов, скорость страниц и ключевые слова. Обычно 1–2 минуты.
-            </p>
-            <p className="text-xs text-muted-foreground">Страница обновится автоматически</p>
+          <CardContent className="pt-6 pb-4 px-6">
+            <ReportProgress startedAt={report.createdAt.toISOString()} />
           </CardContent>
         </Card>
       )}
@@ -192,6 +195,12 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
                 ? <QuickFixesSection quickFixes={quickFixes} />
                 : <EmptyTab text="Создайте новый отчёт чтобы увидеть список задач" />
               }
+              {missingTerms && missingTerms.length > 0 && (
+                <MissingTermsSection terms={missingTerms} />
+              )}
+              {nichePatterns && nichePatterns.length > 0 && (
+                <NichePatternsSection patterns={nichePatterns} />
+              )}
               {blockMatrix.length > 0 && (
                 <BlockMatrixSection
                   blockMatrix={blockMatrix}
@@ -506,6 +515,37 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         </>
       )}
     </div>
+  );
+}
+
+function MissingTermsSection({ terms }: { terms: MissingTerm[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <TrendingUp className="h-4 w-4" /> Слова которых не хватает в тексте
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Эти термины регулярно встречаются у конкурентов, но редки или отсутствуют на вашей странице.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {terms.map((t, i) => (
+            <div
+              key={i}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm"
+              title={`У конкурентов ${t.competitorFreq}x/стр (${t.competitorCount} сайтов), у вас — ${t.targetFreq}x`}
+            >
+              <span className="font-medium">{t.term}</span>
+              <span className="text-xs text-muted-foreground">
+                {t.competitorFreq}x
+              </span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
