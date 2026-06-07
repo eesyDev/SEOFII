@@ -174,7 +174,7 @@ export async function processReport(reportId: string) {
       { brief, costUsd: briefCost },
       [comparisons, blockMatrix],
     ] = await Promise.all([
-      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType, targetSnapshot),
+      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType, targetSnapshot, compSnapshots),
       Promise.all([
         generateComparisons(targetSnapshot, compSnapshots, topCompetitors),
         generateBlockMatrix(targetSnapshot, compSnapshots, topCompetitors, siteType),
