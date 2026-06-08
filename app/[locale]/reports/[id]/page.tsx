@@ -18,6 +18,7 @@ import type { PageSpeedData } from "@/lib/pagespeed";
 import type { GscRow } from "@/lib/gsc";
 import type { SiteType } from "@/lib/scraper";
 import { ReportPoller } from "@/components/report-poller";
+import { MonitoringSection } from "@/components/report/monitoring-section";
 import { SummaryCards } from "@/components/report/summary-cards";
 import { VolumeChart, GscPositionsChart } from "@/components/report/report-charts";
 import { KeywordTable } from "@/components/report/keyword-table";
@@ -75,7 +76,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const userId = session.user.id;
   const { id } = await params;
 
-  const [report, user] = await Promise.all([
+  const [report, user, monitoring] = await Promise.all([
     prisma.report.findUnique({
       where: { id, userId },
       include: {
@@ -86,6 +87,13 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
     prisma.user.findUnique({
       where: { id: userId },
       select: { plan: true, isAdmin: true },
+    }),
+    prisma.pageMonitor.findFirst({
+      where: { reportId: id },
+      include: {
+        changes:  { orderBy: { detectedAt: "desc" }, take: 20 },
+        outcomes: { orderBy: { delta: "asc" }, take: 30 },
+      },
     }),
   ]);
 
@@ -208,6 +216,22 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
                 />
               )}
               {pageStructure && <PageStructureSection pageStructure={pageStructure} />}
+              {monitoring && (
+                <MonitoringSection data={{
+                  isActive: monitoring.isActive,
+                  changes: monitoring.changes.map((c) => ({
+                    ...c,
+                    detectedAt: c.detectedAt.toISOString(),
+                  })),
+                  outcomes: monitoring.outcomes.map((o) => ({
+                    keyword: o.keyword,
+                    positionBefore: o.positionBefore,
+                    positionAfter: o.positionAfter,
+                    delta: o.delta,
+                    daysAfterChange: o.daysAfterChange,
+                  })),
+                }} />
+              )}
             </TabsContent>
 
             {/* ── ТАБ 2: КОНКУРЕНТЫ ── */}

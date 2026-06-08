@@ -26,6 +26,7 @@ model User {
   reports       Report[]
   sessions      Session[]
   subscription  Subscription?
+  monitors      PageMonitor[]
 
   @@map("users")
 }
@@ -111,6 +112,7 @@ model Report {
   locationCode Int          @default(2840)
   competitors  Competitor[]
   keywords     Keyword[]
+  monitor      PageMonitor?
   project      Project?     @relation(fields: [projectId], references: [id])
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -145,6 +147,75 @@ model Keyword {
 
   @@index([reportId])
   @@map("keywords")
+}
+
+model PageMonitor {
+  id        String               @id @default(cuid())
+  userId    String
+  reportId  String               @unique
+  url       String
+  isActive  Boolean              @default(true)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  report    Report               @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  snapshots PageSnapshotRecord[]
+  changes   DetectedChange[]
+  outcomes  RankingOutcome[]
+
+  @@index([userId, isActive])
+  @@index([url])
+  @@map("page_monitors")
+}
+
+model PageSnapshotRecord {
+  id             String      @id @default(cuid())
+  monitorId      String
+  takenAt        DateTime    @default(now())
+  wordCount      Int
+  title          String
+  h1             String
+  headings       String[]
+  detectedBlocks String[]
+  schemaTypes    String[]
+  internalLinks  Int
+  monitor        PageMonitor @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+
+  @@index([monitorId, takenAt])
+  @@map("page_snapshot_records")
+}
+
+model DetectedChange {
+  id          String          @id @default(cuid())
+  monitorId   String
+  detectedAt  DateTime        @default(now())
+  changeType  String
+  field       String
+  valueBefore String
+  valueAfter  String
+  monitor     PageMonitor     @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  outcomes    RankingOutcome[]
+
+  @@index([monitorId, detectedAt])
+  @@map("detected_changes")
+}
+
+model RankingOutcome {
+  id              String          @id @default(cuid())
+  monitorId       String
+  changeId        String?
+  keyword         String
+  positionBefore  Float
+  positionAfter   Float
+  delta           Float
+  daysAfterChange Int
+  measuredAt      DateTime        @default(now())
+  monitor         PageMonitor     @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  change          DetectedChange? @relation(fields: [changeId], references: [id])
+
+  @@index([monitorId])
+  @@index([changeId])
+  @@map("ranking_outcomes")
 }
 
 model NichePattern {

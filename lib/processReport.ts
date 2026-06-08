@@ -17,6 +17,7 @@ import { fetchPageSpeeds } from "@/lib/pagespeed";
 import type { PageSpeedData } from "@/lib/pagespeed";
 import type { GscRow } from "@/lib/gsc";
 import type { Prisma } from "@prisma/client";
+import { snapshotFromPage, diffSnapshots, computeRankingOutcomes } from "@/lib/pageMonitor";
 
 // PageSpeed не блокирует отчёт — если не успел за 20s, возвращаем пустые данные
 async function fetchPageSpeedsWithTimeout(
@@ -252,6 +253,11 @@ export async function processReport(reportId: string) {
       data: { reportsUsed: { increment: 1 } },
     });
 
+    // Outcome data: мониторинг страницы
+    await setupMonitoring(reportId, report.userId, report.url, targetSnapshot, gscRows).catch((err) =>
+      console.warn("[pageMonitor] non-fatal error:", err)
+    );
+
     return { success: true, reportId, costUsd };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Неизвестная ошибка";
@@ -260,5 +266,96 @@ export async function processReport(reportId: string) {
       data: { status: "FAILED", errorMessage: message },
     });
     throw error;
+  }
+}
+
+// ─────────────────────────────────────────
+// OUTCOME DATA: мониторинг + корреляция позиций
+// ─────────────────────────────────────────
+
+async function setupMonitoring(
+  reportId: string,
+  userId: string,
+  url: string,
+  targetSnapshot: import("@/lib/scraper").PageSnapshot,
+  gscRows: GscRow[]
+) {
+  const snap = snapshotFromPage(targetSnapshot);
+
+  const existingMonitor = await prisma.pageMonitor.findFirst({
+    where: { userId, url },
+    include: {
+      snapshots: { orderBy: { takenAt: "desc" }, take: 1 },
+      changes: { orderBy: { detectedAt: "desc" }, take: 10 },
+      report: { select: { gscData: true, createdAt: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!existingMonitor) {
+    // Первый отчёт для этого URL — создаём монитор и начальный снапшот
+    const monitor = await prisma.pageMonitor.create({
+      data: { userId, reportId, url },
+    });
+    await prisma.pageSnapshotRecord.create({
+      data: { monitorId: monitor.id, ...snap },
+    });
+    console.log(`[pageMonitor] Создан монитор для ${url}`);
+    return;
+  }
+
+  // Повторный отчёт — деактивируем старый монитор, создаём новый привязанный к свежему отчёту
+  await prisma.pageMonitor.update({
+    where: { id: existingMonitor.id },
+    data: { isActive: false },
+  });
+
+  const newMonitor = await prisma.pageMonitor.create({
+    data: { userId, reportId, url },
+  });
+
+  await prisma.pageSnapshotRecord.create({
+    data: { monitorId: newMonitor.id, ...snap },
+  });
+
+  // Диффим страницу с предыдущим снапшотом
+  const prevSnap = existingMonitor.snapshots[0];
+  if (prevSnap) {
+    const diffs = diffSnapshots(prevSnap, snap);
+    if (diffs.length > 0) {
+      await prisma.detectedChange.createMany({
+        data: diffs.map((d) => ({ monitorId: newMonitor.id, ...d })),
+      });
+      console.log(`[pageMonitor] ${url}: ${diffs.length} изменений с прошлого отчёта`);
+    }
+  }
+
+  // Если есть GSC данные в обоих отчётах — вычисляем outcome
+  const prevGscRows = (existingMonitor.report.gscData as GscRow[] | null) ?? [];
+  if (prevGscRows.length > 0 && gscRows.length > 0) {
+    const daysBetween = Math.round(
+      (Date.now() - new Date(existingMonitor.report.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+    );
+    const outcomes = computeRankingOutcomes(prevGscRows, gscRows, daysBetween);
+
+    if (outcomes.length > 0) {
+      // Берём последнее изменение как атрибуцию (грубая, но рабочая эвристика)
+      const lastChange = existingMonitor.changes[0];
+
+      await prisma.rankingOutcome.createMany({
+        data: outcomes.slice(0, 50).map((o) => ({
+          monitorId: newMonitor.id,
+          changeId: lastChange?.id ?? null,
+          keyword: o.keyword,
+          positionBefore: o.positionBefore,
+          positionAfter: o.positionAfter,
+          delta: o.delta,
+          daysAfterChange: o.daysAfterChange,
+        })),
+      });
+
+      const improved = outcomes.filter((o) => o.delta < -0.5).length;
+      console.log(`[pageMonitor] ${url}: ${improved} запросов улучшились, ${outcomes.filter(o => o.delta > 0.5).length} упали`);
+    }
   }
 }
