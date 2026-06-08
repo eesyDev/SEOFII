@@ -2,74 +2,91 @@
   "Landing": {
     "nav": {
       "login": "Sign in",
-      "register": "Get started"
+      "register": "Try for free"
     },
     "hero": {
-      "badge": "Powered by Claude AI + DataForSEO",
-      "h1": "SEO analysis and ready",
-      "h1Accent": "content in minutes",
-      "subtitle": "Enter a URL — get a competitor breakdown, task list, and ready-to-paste content for your site.",
-      "ctaPrimary": "Try for free",
+      "badge": "Weekly monitoring + AI competitor analysis",
+      "h1": "Find out why your competitor",
+      "h1Accent": "ranks above you",
+      "subtitle": "Enter a URL — in 2 minutes get a concrete task list and ready-to-paste content. We monitor your page every week and show what actually works in your niche.",
+      "ctaPrimary": "Analyze my site",
       "ctaSecondary": "Sign in"
     },
     "stats": {
-      "timeValue": "1–2 min",
-      "timeLabel": "generation time",
-      "aiValue": "Claude AI",
-      "aiLabel": "under the hood",
-      "tasksValue": "5 tasks",
-      "tasksLabel": "what to do right now"
+      "timeValue": "2 min",
+      "timeLabel": "to first result",
+      "aiValue": "5 tasks",
+      "aiLabel": "specific, right now",
+      "tasksValue": "weekly",
+      "tasksLabel": "page monitoring"
     },
     "howItWorks": {
       "sectionLabel": "How it works",
-      "title": "Three steps — done",
+      "title": "From URL to action plan in 2 minutes",
       "features": [
         {
-          "title": "Competitor analysis",
-          "description": "Enter a URL — we find everyone ranking above you and analyze why"
+          "title": "Enter your URL",
+          "description": "We find top-10 competitors, scrape their pages and see exactly what they have — headings, blocks, schemas, word count"
         },
         {
-          "title": "Gap analysis & quick wins",
-          "description": "We show which keywords your competitors have that you don't — and what's easiest to fix"
+          "title": "Get a concrete plan",
+          "description": "Not \"improve your SEO\" — but specific: \"replace title with this exact text\", \"add FAQ with these questions\" — ready to copy-paste"
         },
         {
-          "title": "Ready content",
-          "description": "Claude AI writes the title, H1, meta description, intro and FAQ — copy and paste"
+          "title": "Track your progress",
+          "description": "We check your page every week. When you make changes — you see how it moves your Google rankings"
+        }
+      ]
+    },
+    "features": {
+      "sectionLabel": "What's inside",
+      "title": "Not just data — a ready action plan",
+      "items": [
+        {
+          "title": "Real competitor page data",
+          "description": "We scrape top-10, count words, check headings and blocks. Not SERP snippets — the actual page content"
+        },
+        {
+          "title": "Ready content to copy-paste",
+          "description": "Title, H1, meta description, intro paragraph, FAQ and schema.org markup — all written, just copy it"
+        },
+        {
+          "title": "Weekly monitoring",
+          "description": "We automatically watch your page. Competitor added a FAQ section? You'll know first"
+        },
+        {
+          "title": "What actually works in your niche",
+          "description": "We accumulate data across thousands of pages. We show which changes drove ranking improvements for sites like yours"
         }
       ]
     },
     "pricing": {
       "sectionLabel": "Pricing",
       "title": "Start for free",
-      "subtitle": "Scale as you grow",
+      "subtitle": "First report — no card required",
       "plans": {
         "free": {
-          "description": "Try risk-free",
-          "perks": ["1 report", "Competitor analysis", "Task list"],
-          "cta": "Start for free"
+          "description": "See what we can do",
+          "perks": ["1 full report", "Top-10 competitor analysis", "Concrete task list", "Ready title, H1, meta"],
+          "cta": "Try for free"
         },
         "starter": {
-          "description": "4 reports / mo",
-          "perks": ["Full competitor analysis", "Ready content to copy-paste", "FAQ and schema.org markup", "Email support"],
-          "cta": "Get Starter"
+          "description": "For one site",
+          "perks": ["4 reports per month", "Weekly page monitoring", "Ready content and FAQ", "Schema.org markup"],
+          "cta": "Start at $25"
         },
         "pro": {
-          "description": "10 reports / mo",
-          "perks": ["Everything in Starter", "More reports", "Priority support"],
+          "description": "For serious work",
+          "perks": ["10 reports per month", "Everything in Starter", "Ranking tracking & outcome data", "Priority support"],
           "cta": "Get Pro",
           "badge": "Popular"
-        },
-        "agency": {
-          "description": "30 reports / mo",
-          "perks": ["Everything in Pro", "Team access", "White-label reports"],
-          "cta": "Coming soon"
         }
       }
     },
     "cta": {
-      "title": "Try it right now",
-      "subtitle": "First report free. No credit card.",
-      "button": "Get started free"
+      "title": "First report — right now",
+      "subtitle": "Free. No card. 2 minutes.",
+      "button": "Analyze my site"
     },
     "footer": {
       "copyright": "© 2026 SEOBrief. All rights reserved."

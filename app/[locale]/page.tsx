@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { getTranslations, getLocale } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
-import { Search, BarChart2, FileText, Check, Zap, ArrowRight, Sparkles, TrendingUp, Clock } from "lucide-react";
+import { Search, BarChart2, FileText, Check, Zap, ArrowRight, Clock, Activity, Target, Sparkles } from "lucide-react";
 import HeroVisual from "@/components/landing/HeroVisual";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 
@@ -9,21 +9,22 @@ export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
   return locale === "ru"
     ? {
-        title: "SEOBrief — SEO-анализ и готовый контент за минуту",
+        title: "SEOBrief — узнай почему конкурент выше тебя",
         description:
-          "Вставь URL — получи разбор конкурентов, gap-анализ и готовые тексты (title, H1, meta, FAQ) которые можно сразу скопировать на сайт. Первый отчёт бесплатно.",
+          "Вставь URL — за 2 минуты получи конкретный список задач и готовые тексты. Еженедельный мониторинг страницы. Первый отчёт бесплатно.",
       }
     : {
-        title: "SEOBrief — SEO analysis and ready content in minutes",
+        title: "SEOBrief — find out why your competitor ranks above you",
         description:
-          "Enter a URL — get a competitor breakdown, gap analysis, and ready-to-paste texts (title, H1, meta, FAQ) for your site. First report free.",
+          "Enter a URL — get a concrete task list and ready-to-paste content in 2 minutes. Weekly page monitoring. First report free.",
       };
 }
 
-const FEATURE_ICONS = [Search, BarChart2, FileText];
-const STAT_ICONS = [TrendingUp, Sparkles, Clock];
-const PLAN_NAMES = ["Free", "Starter", "Pro", "Agency"] as const;
-const PLAN_PRICES = ["0", "25", "50", "120"];
+const FEATURE_ICONS = [Search, FileText, Activity];
+const STAT_ICONS = [Clock, Target, Activity];
+const PLAN_NAMES = ["Free", "Starter", "Pro"] as const;
+const PLAN_PRICES = ["0", "25", "50"];
+const FEATURE_ITEM_ICONS = [BarChart2, FileText, Activity, Target];
 
 export default async function HomePage() {
   const t = await getTranslations("Landing");
@@ -42,7 +43,7 @@ export default async function HomePage() {
   ];
 
   const plans = PLAN_NAMES.map((name, i) => {
-    const key = name.toLowerCase() as "free" | "starter" | "pro" | "agency";
+    const key = name.toLowerCase() as "free" | "starter" | "pro";
     return {
       name,
       price: PLAN_PRICES[i],
@@ -50,9 +51,14 @@ export default async function HomePage() {
       perks: t.raw(`pricing.plans.${key}.perks`) as string[],
       cta: t(`pricing.plans.${key}.cta`),
       highlight: name === "Pro",
-      agency: name === "Agency",
     };
   });
+
+  const featureItems = FEATURE_ITEM_ICONS.map((icon, i) => ({
+    icon,
+    title: t(`features.items.${i}.title`),
+    description: t(`features.items.${i}.description`),
+  }));
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -64,7 +70,7 @@ export default async function HomePage() {
         "operatingSystem": "Web",
         "url": "https://seobrief.ru",
         "description": t("hero.subtitle"),
-        "offers": PLAN_NAMES.slice(0, 3).map((name, i) => ({
+        "offers": PLAN_NAMES.map((name, i) => ({
           "@type": "Offer",
           "name": name,
           "price": PLAN_PRICES[i],
@@ -219,12 +225,41 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* ── FEATURES ── */}
+      <section className="relative py-28 px-5">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -left-40 top-1/2 h-[400px] w-[400px] rounded-full bg-violet-600/8 blur-[120px]" />
+        </div>
+        <div className="container mx-auto max-w-5xl">
+          <div className="mb-16 text-center">
+            <p className="mb-3 text-sm font-medium text-[#fd356e] uppercase tracking-widest">
+              {t("features.sectionLabel")}
+            </p>
+            <h2 className="text-4xl font-semibold">{t("features.title")}</h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {featureItems.map((item) => (
+              <div
+                key={item.title}
+                className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 hover:border-[#fd356e]/20 transition-colors"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#fd356e]/10 mb-4">
+                  <item.icon className="h-4.5 w-4.5 text-[#fd356e]" />
+                </div>
+                <h3 className="text-base font-medium text-white mb-2">{item.title}</h3>
+                <p className="text-sm leading-relaxed text-zinc-400">{item.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── PRICING ── */}
       <section className="relative py-28 px-5">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute -right-40 bottom-0 h-[400px] w-[400px] rounded-full bg-[#fd356e]/8 blur-[100px]" />
         </div>
-        <div className="container mx-auto max-w-5xl">
+        <div className="container mx-auto max-w-4xl">
           <div className="mb-16 text-center">
             <p className="mb-3 text-sm font-medium text-[#fd356e] uppercase tracking-widest">
               {t("pricing.sectionLabel")}
@@ -233,30 +268,30 @@ export default async function HomePage() {
             <p className="mt-3 text-zinc-400">{t("pricing.subtitle")}</p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-3">
             {plans.map((plan) => (
               <div
                 key={plan.name}
-                className={`relative flex flex-col rounded-2xl p-5 transition-all ${
+                className={`relative flex flex-col rounded-2xl p-6 transition-all ${
                   plan.highlight
                     ? "border border-[#fd356e]/50 bg-gradient-to-b from-[#fd356e]/10 to-transparent shadow-xl shadow-[#fd356e]/10"
                     : "border border-white/[0.06] bg-white/[0.02]"
-                } ${plan.agency ? "opacity-60" : ""}`}
+                }`}
               >
                 {plan.highlight && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#fd356e] px-3 py-0.5 text-xs font-medium text-white">
                     {t("pricing.plans.pro.badge")}
                   </div>
                 )}
-                <div className="mb-5">
+                <div className="mb-6">
                   <p className="text-sm font-medium text-zinc-400 mb-1">{plan.name}</p>
                   <div className="flex items-baseline gap-1">
                     <span className="text-4xl font-semibold">${plan.price}</span>
                     {plan.price !== "0" && <span className="text-zinc-500 text-sm">/mo</span>}
                   </div>
-                  <p className="mt-1 text-xs text-zinc-500">{plan.description}</p>
+                  <p className="mt-1.5 text-xs text-zinc-500">{plan.description}</p>
                 </div>
-                <ul className="mb-6 flex-1 space-y-2">
+                <ul className="mb-8 flex-1 space-y-2.5">
                   {plan.perks.map((perk) => (
                     <li key={perk} className="flex items-start gap-2 text-sm text-zinc-300">
                       <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#fd356e]" />
@@ -265,12 +300,10 @@ export default async function HomePage() {
                   ))}
                 </ul>
                 <Link
-                  href={plan.agency ? "#" : "/register"}
+                  href="/register"
                   className={`flex items-center justify-center rounded-xl py-2.5 text-sm font-medium transition-all ${
                     plan.highlight
                       ? "bg-[#fd356e] text-white hover:bg-[#ff5a84] shadow-lg shadow-[#fd356e]/20"
-                      : plan.agency
-                      ? "border border-white/10 text-zinc-500 cursor-not-allowed"
                       : "border border-white/10 text-zinc-300 hover:bg-white/5 hover:text-white"
                   }`}
                 >
