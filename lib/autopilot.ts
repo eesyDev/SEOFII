@@ -2,10 +2,9 @@
 // Coordinates: site sync → AI analysis → change generation → approval → apply → monitor
 
 import { prisma } from "./prisma";
-import { syncWPSite, updateWPPage, fetchYoastMeta, updateYoastMeta, type WPCredentials } from "./wordpress";
+import { syncWPSite, updateWPPage, updateYoastMeta, type WPCredentials } from "./wordpress";
 import { scrapePages } from "./scraper";
-import { fetchCompetitors } from "./dataforseo";
-import { generateSEOBrief, generateReadyContent } from "./claude";
+import { fetchCompetitors, fetchKeywords, type SerpResult } from "./dataforseo";
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -22,7 +21,6 @@ export async function syncSitePages(siteId: string) {
   const creds = site.credentials as unknown as WPCredentials;
   const synced = await syncWPSite(site.url, creds);
 
-  // Upsert pages
   for (const page of synced) {
     await prisma.sitePage.upsert({
       where: { siteId_url: { siteId, url: page.url } },
@@ -68,15 +66,12 @@ export async function createAutopilotJob(siteId: string) {
   });
   if (!site) throw new Error("Site not found");
 
-  // 1. Sync latest pages
   await syncSitePages(siteId);
 
-  // 2. Create job
   const job = await prisma.autoPilotJob.create({
     data: { siteId, status: "ANALYZING" },
   });
 
-  // 3. Re-fetch pages after sync (was stale)
   const freshPages = await prisma.sitePage.findMany({
     where: { siteId, status: "publish" },
     take: 10,
@@ -91,10 +86,12 @@ export async function createAutopilotJob(siteId: string) {
     oldValue: string | null;
     newValue: string;
     aiReasoning: string;
+    evidence: object;
+    confidence: number;
   }> = [];
 
   for (const page of freshPages) {
-    if (!page.wpId) continue; // skip pages without WordPress ID
+    if (!page.wpId) continue;
     try {
       const pageChanges = await analyzePageForAutopilot(site, page);
       changes.push(...pageChanges);
@@ -103,7 +100,6 @@ export async function createAutopilotJob(siteId: string) {
     }
   }
 
-  // 4. Save changes
   if (changes.length > 0) {
     await prisma.autoPilotChange.createMany({
       data: changes.map((c) => ({
@@ -114,13 +110,14 @@ export async function createAutopilotJob(siteId: string) {
         oldValue: c.oldValue,
         newValue: c.newValue,
         aiReasoning: c.aiReasoning,
+        evidence: c.evidence as any,
+        confidence: c.confidence,
         status: "PENDING" as const,
       })),
     });
     totalChanges = changes.length;
   }
 
-  // 5. Update job
   const updatedJob = await prisma.autoPilotJob.update({
     where: { id: job.id },
     data: {
@@ -136,76 +133,204 @@ export async function createAutopilotJob(siteId: string) {
 }
 
 // ─────────────────────────────────────────
-// 3. AI ANALYSIS FOR SINGLE PAGE
+// 3. AI ANALYSIS FOR SINGLE PAGE — NON-GENERIC
 // ─────────────────────────────────────────
 
 async function analyzePageForAutopilot(
   site: Awaited<ReturnType<typeof prisma.siteConnection.findUnique>> & { pages: any[] },
   page: { url: string; wpId: number | null; title: string | null; content: string | null }
 ) {
-  const changes: Array<{
+  // Scrape target + competitors in parallel
+  const { target } = await scrapePages(page.url, []);
+
+  let serpCompetitors: SerpResult[] = [];
+  try {
+    serpCompetitors = await fetchCompetitors(page.url, 2840);
+  } catch {
+    // If SERP fails, we can still do basic analysis but will be less specific
+  }
+
+  // Scrape top 3 competitor pages for REAL data (not just SERP snippets)
+  const topUrls = serpCompetitors.slice(0, 3).map((c) => c.url);
+  let compSnapshots: import("./scraper").PageSnapshot[] = [];
+  if (topUrls.length > 0) {
+    try {
+      const scrapeResult = await scrapePages(page.url, topUrls);
+      compSnapshots = scrapeResult.competitors;
+    } catch {
+      // If scraping fails, fall back to SERP-only data
+    }
+  }
+
+  // Fetch keyword volumes from competitor titles
+  const rawKeywords = serpCompetitors
+    .flatMap((c) => c.title.toLowerCase().split(/\s+/))
+    .filter((w) => w.length > 3);
+  const uniqueKeywords = [...new Set(rawKeywords)].slice(0, 20);
+
+  let keywordData: import("./dataforseo").KeywordData[] = [];
+  if (uniqueKeywords.length > 0) {
+    try {
+      keywordData = await fetchKeywords(uniqueKeywords, 2840);
+    } catch {
+      // Keywords are nice-to-have, not blocking
+    }
+  }
+
+  // Build competitor comparison matrix with REAL scraped data
+  const competitorRows = serpCompetitors.slice(0, 3).map((comp, i) => {
+    const snap = compSnapshots[i];
+    if (snap && !snap.fetchError) {
+      return {
+        domain: comp.domain,
+        position: comp.position,
+        title: snap.title,
+        metaDescription: snap.metaDescription,
+        wordCount: snap.wordCount,
+        headings: snap.headings,
+        headingsCount: snap.headings.length,
+        hasSchema: snap.hasSchema,
+        schemaTypes: snap.schemaTypes,
+        detectedBlocks: snap.detectedBlocks,
+        internalLinks: snap.internalLinksCount,
+      };
+    }
+    // Fallback to SERP-only data
+    return {
+      domain: comp.domain,
+      position: comp.position,
+      title: comp.title,
+      metaDescription: "",
+      wordCount: null,
+      headings: [],
+      headingsCount: null,
+      hasSchema: false,
+      schemaTypes: [],
+      detectedBlocks: [],
+      internalLinks: null,
+    };
+  });
+
+  // If we have no real competitor data at all, skip analysis
+  if (competitorRows.length === 0) {
+    return [];
+  }
+
+  // Build the prompt with MAXIMUM concrete data
+  const keywordsBlock = keywordData.length > 0
+    ? keywordData
+        .filter((k) => k.volume > 0)
+        .map((k) => `  "${k.keyword}": ${k.volume}/mo searches, $${k.cpc} CPC`)
+        .join("\n")
+    : "  (no keyword volume data available)";
+
+  const comparisonTable = competitorRows
+    .map((c) => {
+      const lines = [
+        `COMPETITOR #${c.position}: ${c.domain}`,
+        `  Title: "${c.title}"`,
+        c.metaDescription ? `  Meta: "${c.metaDescription}"` : "",
+        c.wordCount !== null ? `  Word count: ${c.wordCount}` : "",
+        c.headingsCount !== null ? `  Headings: ${c.headingsCount} (${c.headings.slice(0, 5).join(" | ")})` : "",
+        c.detectedBlocks.length > 0 ? `  Blocks: ${c.detectedBlocks.join(", ")}` : "",
+        c.hasSchema ? `  Schema: ${c.schemaTypes.join(", ")}` : "  Schema: none",
+        c.internalLinks !== null ? `  Internal links: ${c.internalLinks}` : "",
+      ];
+      return lines.filter(Boolean).join("\n");
+    })
+    .join("\n\n");
+
+  const targetBlock = [
+    `YOUR PAGE: ${page.url}`,
+    `  Title: "${target.title || "MISSING"}"`,
+    `  Meta: "${target.metaDescription || "MISSING"}"`,
+    `  H1: "${target.h1 || "MISSING"}"`,
+    `  Word count: ${target.wordCount}`,
+    `  Headings: ${target.headings.length} (${target.headings.slice(0, 5).join(" | ")})`,
+    `  Blocks: ${target.detectedBlocks.join(", ") || "none detected"}`,
+    `  Schema: ${target.schemaTypes.join(", ") || "none"}`,
+    `  Internal links: ${target.internalLinksCount}`,
+  ].join("\n");
+
+  const prompt = `You are an elite SEO analyst. Your ONLY job is to find SPECIFIC, DATA-DRIVEN changes based on the competitor analysis below.
+
+CRITICAL RULES — a recommendation is REJECTED if it violates ANY of these:
+1. reasoning MUST cite a SPECIFIC competitor by domain name (e.g. "sofas.com has...")
+2. reasoning MUST include a SPECIFIC number or metric (e.g. "2400 words vs your 820")
+3. reasoning MUST NOT contain generic phrases like "improve SEO", "better ranking", "optimize", "enhance visibility"
+4. newValue MUST be measurably different from oldValue and concrete (not vague)
+5. If no strong evidence exists, output EMPTY array — do NOT make up recommendations
+
+${targetBlock}
+
+${comparisonTable}
+
+KEYWORDS WITH SEARCH VOLUME:
+${keywordsBlock}
+
+OUTPUT FORMAT — JSON array only. Each object MUST have:
+- field: "title" or "meta_description"
+- newValue: the exact new text (≤60 chars for title, ≤155 for meta)
+- reasoning: one sentence with SPECIFIC competitor name + SPECIFIC metric
+- evidence: object with { competitorDomain, metricBefore, metricAfter, source }
+- confidence: 0-100 (only ≥70 if you have scraped data, ≥50 if SERP-only)
+
+Example of GOOD recommendation:
+{
+  "field": "title",
+  "newValue": "Buy Leather Sofas in London — Free Delivery | SofaWorld",
+  "reasoning": "sofas.com (position #1) includes price + city + free delivery in title; their CTR is 4.2% vs industry 2.1%",
+  "evidence": { "competitorDomain": "sofas.com", "metricBefore": "Sofas | SofaWorld", "metricAfter": "Buy Leather Sofas in London — Free Delivery | SofaWorld", "source": "scraped competitor title" },
+  "confidence": 85
+}
+
+Example of BAD recommendation (will be rejected):
+{
+  "field": "title",
+  "newValue": "Best Sofas 2026 | Quality Furniture",
+  "reasoning": "This will improve SEO and help rank better",
+  "evidence": {},
+  "confidence": 60
+}
+
+ANALYZE AND OUTPUT:`;
+
+  const message = await anthropic.messages.create({
+    model: "claude-3-5-haiku-20241022",
+    max_tokens: 1200,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = message.content[0].type === "text" ? message.content[0].text : "";
+
+  let aiChanges: Array<{
+    field: string;
+    newValue: string;
+    reasoning: string;
+    evidence: object;
+    confidence: number;
+  }> = [];
+
+  try {
+    const parsed = JSON.parse(extractJson(text));
+    if (Array.isArray(parsed)) {
+      aiChanges = parsed.filter(isValidRecommendation);
+    }
+  } catch {
+    // If AI returns garbage, we return NOTHING — no generic fallback
+    aiChanges = [];
+  }
+
+  const result: Array<{
     pageUrl: string;
     wpPostId: number | null;
     field: string;
     oldValue: string | null;
     newValue: string;
     aiReasoning: string;
+    evidence: object;
+    confidence: number;
   }> = [];
-
-  // Scrape current page
-  const { target } = await scrapePages(page.url, []);
-
-  // Get competitors (or use cached)
-  let competitors: import("./dataforseo").SerpResult[];
-  try {
-    competitors = await fetchCompetitors(page.url, 2840);
-  } catch {
-    // If DataForSEO fails, skip competitor analysis
-    competitors = [];
-  }
-
-  // Use Claude to generate specific changes
-  const prompt = `You are an SEO autopilot. Analyze this page and output ONLY specific, actionable changes.
-
-PAGE URL: ${page.url}
-CURRENT TITLE: ${target.title || "missing"}
-CURRENT H1: ${target.h1 || "missing"}
-CURRENT META DESCRIPTION: ${target.metaDescription || "missing"}
-WORD COUNT: ${target.wordCount}
-HEADINGS: ${target.headings.join(" | ") || "none"}
-${competitors.length > 0 ? `TOP COMPETITORS:\n${competitors.slice(0, 3).map((c, i) => `${i + 1}. ${c.title} (${c.domain})`).join("\n")}` : ""}
-
-RULES:
-- Output ONLY a JSON array of changes
-- Each change must have: field ("title" or "meta_description"), newValue, reasoning
-- Title must be ≤ 60 characters
-- Meta description must be ≤ 155 characters
-- reasoning must be 1 sentence explaining WHY this change will improve SEO
-- Only suggest changes that are MEASURABLY better than current
-- If current title/meta are already good, output empty array
-
-OUTPUT FORMAT:
-[
-  { "field": "title", "newValue": "...", "reasoning": "..." },
-  { "field": "meta_description", "newValue": "...", "reasoning": "..." }
-]`;
-
-  const message = await anthropic.messages.create({
-    model: "claude-3-5-haiku-20241022",
-    max_tokens: 800,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const text = message.content[0].type === "text" ? message.content[0].text : "";
-
-  let aiChanges: Array<{ field: string; newValue: string; reasoning: string }> = [];
-  try {
-    const parsed = JSON.parse(extractJson(text));
-    if (Array.isArray(parsed)) aiChanges = parsed;
-  } catch {
-    // If AI returns garbage, fall back to simple improvements
-    aiChanges = generateFallbackChanges(target);
-  }
 
   for (const change of aiChanges) {
     const oldValue =
@@ -215,49 +340,56 @@ OUTPUT FORMAT:
         ? target.metaDescription || ""
         : "";
 
-    // Skip if no real change
     if (oldValue.trim() === change.newValue.trim()) continue;
 
-    changes.push({
+    result.push({
       pageUrl: page.url,
       wpPostId: page.wpId,
       field: change.field,
       oldValue: oldValue || null,
       newValue: change.newValue,
       aiReasoning: change.reasoning,
+      evidence: change.evidence,
+      confidence: change.confidence,
     });
   }
 
-  return changes;
+  return result;
 }
 
-function generateFallbackChanges(target: import("./scraper").PageSnapshot): Array<{
-  field: string;
-  newValue: string;
-  reasoning: string;
-}> {
-  const changes: Array<{ field: string; newValue: string; reasoning: string }> = [];
+// ─────────────────────────────────────────
+// VALIDATION: reject generic recommendations
+// ─────────────────────────────────────────
 
-  // Title: add power words if missing
-  if (target.title && target.title.length < 40) {
-    changes.push({
-      field: "title",
-      newValue: `${target.title} | Best Guide 2026`,
-      reasoning: "Current title is too short; adding year and power word improves CTR",
-    });
-  }
+const GENERIC_PHRASES = [
+  "improve seo", "better ranking", "optimize", "enhance visibility",
+  "boost traffic", "increase ranking", "better performance", "seo friendly",
+  "search engine", "rank higher", "improve position", "better results",
+  "good for seo", "help ranking", "improve ctr", "more clicks",
+];
 
-  // Meta: generate if missing
-  if (!target.metaDescription || target.metaDescription.length < 50) {
-    const h1 = target.h1 || target.title || "This page";
-    changes.push({
-      field: "meta_description",
-      newValue: `Learn everything about ${h1}. Expert tips, step-by-step guide, and proven strategies. Read now!`,
-      reasoning: "Meta description is missing or too short; this improves click-through rate from search results",
-    });
-  }
+function isValidRecommendation(item: any): boolean {
+  if (!item || typeof item !== "object") return false;
+  if (!item.field || !item.newValue || !item.reasoning) return false;
 
-  return changes;
+  // Must cite a competitor domain (contains a dot)
+  const hasDomain = /\.[a-z]{2,6}/i.test(item.reasoning);
+  if (!hasDomain) return false;
+
+  // Must contain a specific number
+  const hasNumber = /\d/.test(item.reasoning);
+  if (!hasNumber) return false;
+
+  // Must NOT contain generic phrases
+  const reasoningLower = item.reasoning.toLowerCase();
+  const isGeneric = GENERIC_PHRASES.some((p) => reasoningLower.includes(p));
+  if (isGeneric) return false;
+
+  // Confidence must be reasonable
+  const confidence = typeof item.confidence === "number" ? item.confidence : 0;
+  if (confidence < 50) return false;
+
+  return true;
 }
 
 function extractJson(text: string): string {
@@ -269,7 +401,8 @@ function extractJson(text: string): string {
   const firstObj = text.indexOf("{");
   const lastObj = text.lastIndexOf("}");
   if (firstObj !== -1 && lastObj !== -1 && lastObj > firstObj) {
-    return text.slice(firstObj, lastObj + 1);
+    // If single object, wrap in array
+    return `[${text.slice(firstObj, lastObj + 1)}]`;
   }
   return text;
 }
@@ -295,39 +428,33 @@ export async function applyChange(changeId: string) {
     throw new Error("Cannot apply change: no WordPress post ID");
   }
 
-  // Determine page type (pages vs posts)
   const pageRecord = await prisma.sitePage.findFirst({
     where: { siteId: site.id, url: change.pageUrl },
   });
   const wpType = pageRecord?.type === "post" ? "posts" : "pages";
 
   try {
-    // Apply via WordPress REST API
     if (change.field === "title") {
       await updateWPPage(site.url, creds, change.wpPostId, wpType, {
         title: change.newValue,
       });
     } else if (change.field === "meta_description") {
-      // Try Yoast first, then fallback to excerpt as meta
       const yoastOk = await updateYoastMeta(site.url, creds, change.wpPostId, wpType, {
         description: change.newValue,
       });
 
       if (!yoastOk) {
-        // Fallback: update excerpt (many themes use excerpt as meta description)
         await updateWPPage(site.url, creds, change.wpPostId, wpType, {
           excerpt: change.newValue,
         });
       }
     }
 
-    // Mark as applied
     await prisma.autoPilotChange.update({
       where: { id: changeId },
       data: { status: "APPLIED", appliedAt: new Date() },
     });
 
-    // Update page record
     if (pageRecord) {
       await prisma.sitePage.update({
         where: { id: pageRecord.id },
@@ -391,7 +518,6 @@ export async function rollbackChange(changeId: string) {
       data: { status: "ROLLED_BACK", rolledBackAt: new Date() },
     });
 
-    // Update page record after rollback
     if (pageRecord) {
       await prisma.sitePage.update({
         where: { id: pageRecord.id },

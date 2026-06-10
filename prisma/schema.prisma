@@ -334,6 +334,8 @@ model AutoPilotChange {
   oldValue      String?             @db.Text
   newValue      String              @db.Text
   aiReasoning   String?             @db.Text
+  evidence      Json?               // concrete data: competitor name, metric, before/after
+  confidence    Int?                @default(50) // 0-100 score
   status        AutoPilotChangeStatus @default(PENDING)
   appliedAt     DateTime?
   rolledBackAt  DateTime?

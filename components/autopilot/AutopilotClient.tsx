@@ -31,6 +31,8 @@ import {
   Loader2,
   Globe,
   Shield,
+  ChevronDown,
+  BarChart3,
 } from "lucide-react";
 
 interface Change {
@@ -40,6 +42,13 @@ interface Change {
   oldValue: string | null;
   newValue: string;
   aiReasoning: string | null;
+  evidence: {
+    competitorDomain?: string;
+    metricBefore?: string;
+    metricAfter?: string;
+    source?: string;
+  } | null;
+  confidence: number | null;
   status: string;
   appliedAt: string | null;
 }
@@ -328,10 +337,46 @@ export default function AutopilotClient({ initialSites }: Props) {
                     <span className="text-primary font-medium shrink-0 w-10">New:</span>
                     <span className="text-foreground font-medium">{change.newValue}</span>
                   </div>
+
+                  {/* Confidence + Reasoning */}
                   {change.aiReasoning && (
-                    <div className="flex gap-2 text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                    <div className="flex items-start gap-2 text-xs bg-muted/50 p-2 rounded">
                       <span className="shrink-0">🤖</span>
-                      <span>{change.aiReasoning}</span>
+                      <div className="flex-1 space-y-1">
+                        <p className="text-foreground">{change.aiReasoning}</p>
+                        <div className="flex items-center gap-2">
+                          {change.confidence !== null && change.confidence >= 0 && (
+                            <Badge
+                              variant={change.confidence >= 80 ? "default" : change.confidence >= 60 ? "secondary" : "outline"}
+                              className="text-[10px] h-5"
+                            >
+                              <BarChart3 className="h-3 w-3 mr-1" />
+                              Confidence: {change.confidence}%
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Evidence Panel */}
+                  {change.evidence && (change.evidence.competitorDomain || change.evidence.metricBefore) && (
+                    <div className="text-xs border-l-2 border-primary/30 pl-3 py-1 space-y-1">
+                      <p className="font-medium text-muted-foreground">Evidence:</p>
+                      {change.evidence.competitorDomain && (
+                        <p className="text-muted-foreground">
+                          Competitor: <span className="font-medium text-foreground">{change.evidence.competitorDomain}</span>
+                        </p>
+                      )}
+                      {change.evidence.metricBefore && change.evidence.metricAfter && (
+                        <p className="text-muted-foreground">
+                          {change.evidence.metricBefore} <span className="text-muted-foreground">→</span>{" "}
+                          <span className="font-medium text-foreground">{change.evidence.metricAfter}</span>
+                        </p>
+                      )}
+                      {change.evidence.source && (
+                        <p className="text-muted-foreground">Source: {change.evidence.source}</p>
+                      )}
                     </div>
                   )}
                 </div>
