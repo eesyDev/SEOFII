@@ -42,6 +42,12 @@ interface Change {
   oldValue: string | null;
   newValue: string;
   aiReasoning: string | null;
+  instruction: string | null;
+  missingElements: Array<{
+    element: string;
+    example: string;
+    competitorDomain: string;
+  }> | null;
   evidence: {
     competitorDomain?: string;
     metricBefore?: string;
@@ -326,16 +332,56 @@ export default function AutopilotClient({ initialSites }: Props) {
                   </div>
                 </div>
 
-                <div className="space-y-2 text-sm">
-                  {change.oldValue && (
-                    <div className="flex gap-2">
-                      <span className="text-muted-foreground shrink-0 w-10">Old:</span>
-                      <span className="text-muted-foreground line-through">{change.oldValue}</span>
+                <div className="space-y-3 text-sm">
+                  {/* Main instruction — what to do */}
+                  {change.instruction && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-amber-600 font-medium shrink-0">Action:</span>
+                      <span className="text-foreground font-medium">{change.instruction}</span>
                     </div>
                   )}
-                  <div className="flex gap-2">
-                    <span className="text-primary font-medium shrink-0 w-10">New:</span>
-                    <span className="text-foreground font-medium">{change.newValue}</span>
+
+                  {/* Missing elements with competitor examples */}
+                  {change.missingElements && change.missingElements.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-muted-foreground">Missing elements (with competitor examples):</p>
+                      {change.missingElements.map((me, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs pl-2">
+                          <span className="text-muted-foreground">•</span>
+                          <span className="text-foreground">{me.element}</span>
+                          <span className="text-muted-foreground">— example:</span>
+                          <span className="font-medium text-foreground">"{me.example}"</span>
+                          <a
+                            href={`https://${me.competitorDomain}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline flex items-center gap-0.5"
+                          >
+                            ({me.competitorDomain})
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Current value */}
+                  {change.oldValue && (
+                    <div className="flex gap-2 text-xs">
+                      <span className="text-muted-foreground shrink-0 w-12">Current:</span>
+                      <span className="text-muted-foreground">{change.oldValue}</span>
+                    </div>
+                  )}
+
+                  {/* Suggested value (mechanical, not AI-generated) */}
+                  <div className="flex gap-2 text-xs border-l-2 border-green-200 pl-3 py-1">
+                    <span className="text-green-700 font-medium shrink-0 w-12">Suggested:</span>
+                    <div className="space-y-1">
+                      <span className="text-foreground">{change.newValue}</span>
+                      <p className="text-[10px] text-muted-foreground">
+                        Based on competitor pattern — edit before applying
+                      </p>
+                    </div>
                   </div>
 
                   {/* Confidence + Reasoning */}

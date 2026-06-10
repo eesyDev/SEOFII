@@ -86,6 +86,8 @@ export async function createAutopilotJob(siteId: string) {
     oldValue: string | null;
     newValue: string;
     aiReasoning: string;
+    instruction: string;
+    missingElements: object;
     evidence: object;
     confidence: number;
   }> = [];
@@ -110,6 +112,8 @@ export async function createAutopilotJob(siteId: string) {
         oldValue: c.oldValue,
         newValue: c.newValue,
         aiReasoning: c.aiReasoning,
+        instruction: c.instruction,
+        missingElements: c.missingElements as any,
         evidence: c.evidence as any,
         confidence: c.confidence,
         status: "PENDING" as const,
@@ -252,14 +256,17 @@ async function analyzePageForAutopilot(
     `  Internal links: ${target.internalLinksCount}`,
   ].join("\n");
 
-  const prompt = `You are an elite SEO analyst. Your ONLY job is to find SPECIFIC, DATA-DRIVEN changes based on the competitor analysis below.
+  const prompt = `You are an elite SEO analyst. Your job is to COMPARE the user's page with competitor pages and identify SPECIFIC MISSING ELEMENTS.
 
-CRITICAL RULES — a recommendation is REJECTED if it violates ANY of these:
-1. reasoning MUST cite a SPECIFIC competitor by domain name (e.g. "sofas.com has...")
-2. reasoning MUST include a SPECIFIC number or metric (e.g. "2400 words vs your 820")
-3. reasoning MUST NOT contain generic phrases like "improve SEO", "better ranking", "optimize", "enhance visibility"
-4. newValue MUST be measurably different from oldValue and concrete (not vague)
-5. If no strong evidence exists, output EMPTY array — do NOT make up recommendations
+CRITICAL — You do NOT write new text from scratch. You only identify what is MISSING and cite the exact competitor example.
+
+RULES (violation = rejection):
+1. instruction must start with action word: "Добавьте", "Удалите", "Замените", "Переместите"
+2. Every missingElement MUST have a real example from a specific competitor
+3. reasoning MUST cite competitor domain + specific metric (e.g. "sofas.com title has 58 chars vs your 23")
+4. suggestedNewValue = user's current text + missing elements mechanically appended (do not rewrite)
+5. NO generic phrases: "improve SEO", "better ranking", "optimize", "enhance visibility", "boost traffic"
+6. If no clear missing elements — output EMPTY array
 
 ${targetBlock}
 
@@ -268,27 +275,36 @@ ${comparisonTable}
 KEYWORDS WITH SEARCH VOLUME:
 ${keywordsBlock}
 
-OUTPUT FORMAT — JSON array only. Each object MUST have:
+OUTPUT FORMAT — JSON array. Each object:
 - field: "title" or "meta_description"
-- newValue: the exact new text (≤60 chars for title, ≤155 for meta)
-- reasoning: one sentence with SPECIFIC competitor name + SPECIFIC metric
-- evidence: object with { competitorDomain, metricBefore, metricAfter, source }
-- confidence: 0-100 (only ≥70 if you have scraped data, ≥50 if SERP-only)
+- instruction: what to do (e.g. "Добавьте цену и количество в title")
+- missingElements: array of { element, example, competitorDomain }
+- suggestedNewValue: mechanical combination (current + missing elements)
+- reasoning: one sentence with competitor + metric
+- evidence: { competitorDomain, metricBefore, metricAfter, source }
+- confidence: 0-100
 
-Example of GOOD recommendation:
+GOOD example:
 {
   "field": "title",
-  "newValue": "Buy Leather Sofas in London — Free Delivery | SofaWorld",
-  "reasoning": "sofas.com (position #1) includes price + city + free delivery in title; their CTR is 4.2% vs industry 2.1%",
-  "evidence": { "competitorDomain": "sofas.com", "metricBefore": "Sofas | SofaWorld", "metricAfter": "Buy Leather Sofas in London — Free Delivery | SofaWorld", "source": "scraped competitor title" },
-  "confidence": 85
+  "instruction": "Добавьте цену и количество моделей в title",
+  "missingElements": [
+    { "element": "цена", "example": "от 15 000 ₽", "competitorDomain": "sofas.com" },
+    { "element": "количество", "example": "500 моделей", "competitorDomain": "divan.ru" }
+  ],
+  "suggestedNewValue": "Купить диваны в Москве — 500 моделей от 15 000 ₽",
+  "reasoning": "sofas.com (позиция #1) и divan.ru (позиция #2) включают цену и количество; их title 58 символов vs ваших 23",
+  "evidence": { "competitorDomain": "sofas.com, divan.ru", "metricBefore": "23 символа", "metricAfter": "58 символов", "source": "scraped competitor titles" },
+  "confidence": 92
 }
 
-Example of BAD recommendation (will be rejected):
+BAD example (rejected):
 {
   "field": "title",
-  "newValue": "Best Sofas 2026 | Quality Furniture",
-  "reasoning": "This will improve SEO and help rank better",
+  "instruction": "Improve your title for better SEO",
+  "missingElements": [],
+  "suggestedNewValue": "Best Sofas 2026 | Quality Furniture Store",
+  "reasoning": "This title will help you rank higher in search results",
   "evidence": {},
   "confidence": 60
 }
@@ -305,7 +321,9 @@ ANALYZE AND OUTPUT:`;
 
   let aiChanges: Array<{
     field: string;
-    newValue: string;
+    instruction: string;
+    missingElements: Array<{ element: string; example: string; competitorDomain: string }>;
+    suggestedNewValue: string;
     reasoning: string;
     evidence: object;
     confidence: number;
@@ -314,10 +332,9 @@ ANALYZE AND OUTPUT:`;
   try {
     const parsed = JSON.parse(extractJson(text));
     if (Array.isArray(parsed)) {
-      aiChanges = parsed.filter(isValidRecommendation);
+      aiChanges = parsed.filter(isValidStructuralRecommendation);
     }
   } catch {
-    // If AI returns garbage, we return NOTHING — no generic fallback
     aiChanges = [];
   }
 
@@ -328,6 +345,8 @@ ANALYZE AND OUTPUT:`;
     oldValue: string | null;
     newValue: string;
     aiReasoning: string;
+    instruction: string;
+    missingElements: object;
     evidence: object;
     confidence: number;
   }> = [];
@@ -340,15 +359,17 @@ ANALYZE AND OUTPUT:`;
         ? target.metaDescription || ""
         : "";
 
-    if (oldValue.trim() === change.newValue.trim()) continue;
+    if (oldValue.trim() === change.suggestedNewValue.trim()) continue;
 
     result.push({
       pageUrl: page.url,
       wpPostId: page.wpId,
       field: change.field,
       oldValue: oldValue || null,
-      newValue: change.newValue,
+      newValue: change.suggestedNewValue,
       aiReasoning: change.reasoning,
+      instruction: change.instruction,
+      missingElements: change.missingElements,
       evidence: change.evidence,
       confidence: change.confidence,
     });
@@ -358,7 +379,7 @@ ANALYZE AND OUTPUT:`;
 }
 
 // ─────────────────────────────────────────
-// VALIDATION: reject generic recommendations
+// VALIDATION: structural recommendations only
 // ─────────────────────────────────────────
 
 const GENERIC_PHRASES = [
@@ -368,24 +389,38 @@ const GENERIC_PHRASES = [
   "good for seo", "help ranking", "improve ctr", "more clicks",
 ];
 
-function isValidRecommendation(item: any): boolean {
-  if (!item || typeof item !== "object") return false;
-  if (!item.field || !item.newValue || !item.reasoning) return false;
+const ACTION_WORDS = ["добавьте", "удалите", "замените", "переместите", "включите", "исключите", "добавь", "удали", "замени"];
 
-  // Must cite a competitor domain (contains a dot)
+function isValidStructuralRecommendation(item: any): boolean {
+  if (!item || typeof item !== "object") return false;
+  if (!item.field || !item.instruction || !item.reasoning) return false;
+
+  // Must have missingElements array with real examples
+  if (!Array.isArray(item.missingElements) || item.missingElements.length === 0) return false;
+  for (const me of item.missingElements) {
+    if (!me.element || !me.example || !me.competitorDomain) return false;
+    if (!/\.[a-z]{2,6}/i.test(me.competitorDomain)) return false;
+  }
+
+  // instruction must start with action word
+  const instructionLower = item.instruction.toLowerCase();
+  const hasAction = ACTION_WORDS.some((w) => instructionLower.startsWith(w));
+  if (!hasAction) return false;
+
+  // reasoning must cite competitor domain
   const hasDomain = /\.[a-z]{2,6}/i.test(item.reasoning);
   if (!hasDomain) return false;
 
-  // Must contain a specific number
+  // reasoning must contain a number
   const hasNumber = /\d/.test(item.reasoning);
   if (!hasNumber) return false;
 
-  // Must NOT contain generic phrases
+  // No generic phrases
   const reasoningLower = item.reasoning.toLowerCase();
   const isGeneric = GENERIC_PHRASES.some((p) => reasoningLower.includes(p));
   if (isGeneric) return false;
 
-  // Confidence must be reasonable
+  // Confidence
   const confidence = typeof item.confidence === "number" ? item.confidence : 0;
   if (confidence < 50) return false;
 
