@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, FolderOpen, FileText, Settings, Zap, CreditCard, Rocket } from "lucide-react";
+import { LayoutDashboard, FolderOpen, FileText, Settings, Zap, CreditCard, Rocket, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface SidebarProps {
@@ -20,6 +20,7 @@ export default function Sidebar({ reportsUsed, reportsLimit, plan }: SidebarProp
   const navItems = [
     { href: "/dashboard" as const, icon: LayoutDashboard, label: t("dashboard") },
     { href: "/autopilot" as const, icon: Rocket,           label: "Autopilot" },
+    { href: "/watches"   as const, icon: Eye,              label: "Competitor Watch" },
     { href: "/projects"  as const, icon: FolderOpen,      label: t("projects") },
     { href: "/reports"   as const, icon: FileText,         label: t("reports") },
     { href: "/billing"   as const, icon: CreditCard,       label: t("billing") },
