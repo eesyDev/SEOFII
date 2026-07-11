@@ -14,11 +14,11 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 const TYPE_COLOR: Record<string, string> = {
-  conversion: "bg-orange-50 text-orange-700 border-orange-200",
-  trust: "bg-blue-50 text-blue-700 border-blue-200",
-  content: "bg-purple-50 text-purple-700 border-purple-200",
-  technical: "bg-gray-50 text-gray-700 border-gray-200",
-  navigation: "bg-gray-50 text-gray-600 border-gray-200",
+  conversion: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800/50",
+  trust: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/50",
+  content: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800/50",
+  technical: "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-700",
+  navigation: "bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800/50 dark:text-gray-400 dark:border-gray-700",
 };
 
 function FrequencyBar({ value }: { value: number }) {

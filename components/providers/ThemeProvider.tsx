@@ -40,14 +40,17 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
           : t;
       setResolvedTheme(resolved);
       document.documentElement.classList.toggle("dark", resolved === "dark");
+      // Нативные элементы (скроллбары, инпуты, select) тоже должны переключаться
+      document.documentElement.style.colorScheme = resolved;
     }
 
     apply(theme);
 
     if (theme === "system") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
-      mq.addEventListener("change", () => apply("system"));
-      return () => mq.removeEventListener("change", () => apply("system"));
+      const onChange = () => apply("system");
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
     }
   }, [theme]);
 

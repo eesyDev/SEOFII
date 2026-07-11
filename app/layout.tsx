@@ -17,10 +17,23 @@ export const metadata: Metadata = {
   },
 };
 
+// Применяем тему ДО первой отрисовки — иначе страница мигает светлым при загрузке в тёмной теме
+const themeInitScript = `
+try {
+  var t = localStorage.getItem("theme");
+  var dark = t === "dark" || ((t === "system" || !t) && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.style.colorScheme = dark ? "dark" : "light";
+} catch (e) {}
+`;
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
   return (
     <html lang={locale} className={cn(geistSans.variable, geistMono.variable)} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="font-sans antialiased">
         {children}
       </body>
