@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import ProfileForm from "@/components/settings/ProfileForm";
 import PasswordForm from "@/components/settings/PasswordForm";
 import DangerZone from "@/components/settings/DangerZone";
+import GscConnect from "@/components/settings/GscConnect";
 import { Separator } from "@/components/ui/separator";
 
 export default async function SettingsPage() {
@@ -52,6 +53,15 @@ export default async function SettingsPage() {
           <PasswordForm />
         </section>
       )}
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">{t("gscTitle")}</h2>
+          <p className="text-sm text-muted-foreground">{t("gscDesc")}</p>
+        </div>
+        <Separator />
+        <GscConnect />
+      </section>
 
       <section className="space-y-4">
         <div>

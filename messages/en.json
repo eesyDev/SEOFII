@@ -67,17 +67,32 @@
       "plans": {
         "free": {
           "description": "See what we can do",
-          "perks": ["1 full report", "Top-10 competitor analysis", "Concrete task list", "Ready title, H1, meta"],
+          "perks": [
+            "1 full report",
+            "Top-10 competitor analysis",
+            "Concrete task list",
+            "Ready title, H1, meta"
+          ],
           "cta": "Try for free"
         },
         "starter": {
           "description": "For one site",
-          "perks": ["4 reports per month", "Weekly page monitoring", "Ready content and FAQ", "Schema.org markup"],
+          "perks": [
+            "4 reports per month",
+            "Weekly page monitoring",
+            "Ready content and FAQ",
+            "Schema.org markup"
+          ],
           "cta": "Start at $25"
         },
         "pro": {
           "description": "For serious work",
-          "perks": ["10 reports per month", "Everything in Starter", "Ranking tracking & outcome data", "Priority support"],
+          "perks": [
+            "10 reports per month",
+            "Everything in Starter",
+            "Ranking tracking & outcome data",
+            "Priority support"
+          ],
           "cta": "Get Pro",
           "badge": "Popular"
         }
@@ -175,9 +190,15 @@
     "popular": "Popular",
     "unlimited": "Unlimited reports",
     "reportsPerMonth": "{count} reports / mo",
-    "free": { "description": "Try risk-free" },
+    "free": {
+      "description": "Try risk-free"
+    },
     "comingSoon": "Coming soon — contact us",
-    "freeFeatures": ["1 report", "Competitor analysis", "Task list (no ready content)"]
+    "freeFeatures": [
+      "1 report",
+      "Competitor analysis",
+      "Task list (no ready content)"
+    ]
   },
   "Settings": {
     "title": "Settings",
@@ -187,7 +208,18 @@
     "passwordTitle": "Password",
     "passwordDesc": "Change your account password",
     "planTitle": "Plan",
-    "planDesc": "Current plan and usage"
+    "planDesc": "Current plan and usage",
+    "gscTitle": "Google Search Console",
+    "gscDesc": "Connect Search Console — queries and positions will flow into reports automatically, no CSV upload needed",
+    "gscLoading": "Checking connection…",
+    "gscNotConnected": "Search Console is not connected. Connect it so reports use your site's real Google data.",
+    "gscConnect": "Connect Search Console",
+    "gscConnectedAs": "Connected as",
+    "gscProperties": "Available properties",
+    "gscDisconnect": "Disconnect",
+    "gscToastConnected": "Search Console connected",
+    "gscToastDisconnected": "Search Console disconnected",
+    "gscToastError": "Failed to connect Search Console. Please try again."
   },
   "Reports": {
     "title": "Reports",

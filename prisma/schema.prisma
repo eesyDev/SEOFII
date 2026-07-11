@@ -29,8 +29,25 @@ model User {
   monitors      PageMonitor[]
   sites         SiteConnection[]
   watches       CompetitorWatch[]
+  gscConnection GscConnection?
 
   @@map("users")
+}
+
+model GscConnection {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  googleEmail  String?
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  scope        String?
+  properties   Json?    // кеш списка ресурсов GSC: [{ siteUrl, permissionLevel }]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("gsc_connections")
 }
 
 model Account {
