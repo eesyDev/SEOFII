@@ -162,7 +162,9 @@ export async function processReport(reportId: string) {
     console.log(`[processReport] competitors: ${fromCache ? "from cache" : "from DataForSEO"} (${competitors.length})`);
 
     const compareCount = isPro ? 3 : 1;
-    const topCompetitors = competitors.slice(0, compareCount);
+    // Скрейпим с запасом: часть сайтов недоступна (анти-бот) — берём первых N доступных,
+    // иначе FREE-юзер с неприступным конкурентом на №1 получает пустой анализ
+    const scrapePool = competitors.slice(0, compareCount + 2);
     const competitorDomains = [...new Set(competitors.map((c) => c.domain))];
 
     const fromTitles = competitors
@@ -171,19 +173,29 @@ export async function processReport(reportId: string) {
     const fromGsc = gscRows.map((r) => r.query);
     const rawKeywords = [...new Set([...fromTitles, ...fromGsc])].slice(0, 30);
 
-    // Всё параллельно: keywords, domains, скрапинг конкурентов, pagespeed
-    // Таргет уже скрапнут выше (targetSnapshotPre), скрапим только конкурентов
-    const competitorUrls = topCompetitors.map((c) => c.url);
+    // Параллельно: keywords, domains, скрапинг пула конкурентов
+    // Таргет уже скрапнут выше (targetSnapshotPre)
     const [
       [_keywordData, domainInfo],
-      compSnapshots,
-      { target: targetSpeed, competitors: compSpeeds },
+      poolSnapshots,
     ] = await Promise.all([
       Promise.all([fetchKeywords(rawKeywords, report.locationCode), fetchDomainInfo(competitorDomains)]),
-      scrapePages(report.url, competitorUrls).then((r) => r.competitors),
-      fetchPageSpeedsWithTimeout(report.url, competitorUrls),
+      scrapePages(report.url, scrapePool.map((c) => c.url)).then((r) => r.competitors),
     ]);
     const targetSnapshot = targetSnapshotPre;
+
+    // Первые N доступных конкурентов (недоступные — в хвост, если доступных не хватило)
+    const paired = scrapePool.map((comp, i) => ({ comp, snap: poolSnapshots[i] }));
+    const usable = [
+      ...paired.filter((p) => p.snap && !p.snap.fetchError),
+      ...paired.filter((p) => !p.snap || p.snap.fetchError),
+    ].slice(0, compareCount);
+    const topCompetitors = usable.map((p) => p.comp);
+    const compSnapshots = usable.map((p) => p.snap);
+    const competitorUrls = topCompetitors.map((c) => c.url);
+
+    const { target: targetSpeed, competitors: compSpeeds } =
+      await fetchPageSpeedsWithTimeout(report.url, competitorUrls);
 
     // Кеш keywords: берём из последнего отчёта если есть
     let keywordData = _keywordData;
