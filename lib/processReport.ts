@@ -12,10 +12,16 @@ import { accumulatePatterns } from "@/lib/patternAccumulator";
 import { analyzeMissingTerms } from "@/lib/termAnalyzer";
 import type { MissingTerm } from "@/lib/termAnalyzer";
 import { computeAnalytics } from "@/lib/analytics";
-import { scrapePages } from "@/lib/scraper";
+import { htmlToText, sanitizeFacts } from "@/lib/factGuard";
+import { markCoveredRecommendations, filterCoveredTexts } from "@/lib/dedupe";
+import { buildCompetitorEvidence } from "@/lib/competitorEvidence";
+import { fetchSitePaths, findSimilarExistingPath } from "@/lib/siteInventory";
+import { computeSemanticAnalysis } from "@/lib/semantic";
+import { scrapePages, BLOCK_LABELS_RU } from "@/lib/scraper";
 import { fetchPageSpeeds } from "@/lib/pagespeed";
 import type { PageSpeedData } from "@/lib/pagespeed";
-import type { GscRow } from "@/lib/gsc";
+import { isUrlQuery, type GscRow } from "@/lib/gsc";
+import { fetchGscRowsForPage } from "@/lib/gscApi";
 import type { Prisma } from "@prisma/client";
 import { snapshotFromPage, diffSnapshots, computeRankingOutcomes } from "@/lib/pageMonitor";
 
@@ -42,16 +48,54 @@ async function fetchPageSpeedsWithTimeout(
   }
 }
 
+// Соответствие: id блока скрейпера → ключевые слова в названиях блоков от Gemini
+const BLOCK_KEYWORDS: Record<string, RegExp> = {
+  reviews: /отзыв|рейтинг|review/i,
+  faq: /faq|вопрос|ответ/i,
+  price: /цен|прайс|стоимост|price/i,
+  calculator: /калькулятор|расчет|расчёт|calculator/i,
+  gallery: /галере|портфолио|фото работ|примеры работ|выполненн/i,
+  map: /карт[аы]|map/i,
+  video: /видео|video/i,
+  team: /команд|специалист|мастер/i,
+  form: /форм[аы]|заявк/i,
+  chat: /чат|chat/i,
+  social_proof: /преимуществ|почему (нас|выбирают)|доказательств|счетчик|счётчик/i,
+  comparison_table: /таблиц|сравнени/i,
+};
+
+function blockAlreadyDetected(recommendedName: string, detectedBlocks: string[]): boolean {
+  return detectedBlocks.some((block) => BLOCK_KEYWORDS[block]?.test(recommendedName));
+}
+
 export async function processReport(reportId: string) {
   const report = await prisma.report.findUnique({ where: { id: reportId } });
   if (!report) throw new Error(`Report ${reportId} not found`);
 
-  const gscRows = (report.gscData as GscRow[] | null) ?? [];
+  // URL-строки из вкладки «Страницы» GSC — не запросы; фильтруем у источника,
+  // иначе они утекают в бриф, семантику и кластеры
+  let gscRows = ((report.gscData as GscRow[] | null) ?? []).filter((r) => !isUrlQuery(r.query));
 
   await prisma.report.update({
     where: { id: reportId },
     data: { status: "PROCESSING" },
   });
+
+  // CSV не загружен, но у юзера подключён Search Console — тянем данные по API
+  if (gscRows.length === 0) {
+    try {
+      const liveRows = await fetchGscRowsForPage(report.userId, report.url);
+      if (liveRows && liveRows.length > 0) {
+        gscRows = liveRows;
+        await prisma.report.update({
+          where: { id: reportId },
+          data: { gscData: liveRows as unknown as Prisma.InputJsonValue },
+        });
+      }
+    } catch (err) {
+      console.warn("[gsc] Live fetch failed, continuing without GSC data:", err);
+    }
+  }
 
   try {
     const user = await prisma.user.findUnique({
@@ -175,27 +219,106 @@ export async function processReport(reportId: string) {
     // Вычисляем пропущенные термины синхронно — чистая CPU работа, ~5ms
     const missingTerms: MissingTerm[] = analyzeMissingTerms(targetSnapshot, compSnapshots);
 
+    // Инвентаризация сайта: sitemap + внутренние ссылки — чтобы не советовать создать существующее
+    const sitePaths = await fetchSitePaths(report.url, targetSnapshot.rawHtml).catch(() => [] as string[]);
+
     // Бриф параллельно с comparisons+blockMatrix — brief не зависит от snapshots
     const [
       { brief, costUsd: briefCost },
       [comparisons, blockMatrix],
     ] = await Promise.all([
-      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType, targetSnapshot, compSnapshots, missingTerms),
+      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType, targetSnapshot, compSnapshots, missingTerms, sitePaths),
       Promise.all([
         generateComparisons(targetSnapshot, compSnapshots, topCompetitors),
         generateBlockMatrix(targetSnapshot, compSnapshots, topCompetitors, siteType),
       ]),
     ]);
 
+    // Страховка: contentGaps, для которых на сайте уже есть похожая страница, помечаем
+    if (brief.contentGaps?.length && sitePaths.length > 0) {
+      brief.contentGaps = brief.contentGaps.map((gap) => {
+        const existing = findSimilarExistingPath(gap.suggestedSlug, sitePaths);
+        return existing ? { ...gap, existingUrl: existing } : gap;
+      });
+    }
+
     brief.domainInfo = Object.fromEntries(
       domainInfo.map((d) => [d.domain, { domainAge: d.domainAge, referringDomains: d.referringDomains }])
     );
 
-    const [quickFixes, pageStructure, readyContent] = await Promise.all([
-      generateQuickFixes(report.url, brief, comparisons, analytics, siteType),
-      analyzePageWithGemini(report.url, competitorDomains),
-      isPro ? generateReadyContent(report.url, brief, siteType) : Promise.resolve(null),
+    // Текст страницы клиента — единственный разрешённый источник фактов о бизнесе
+    const targetPageText = targetSnapshot.rawHtml ? htmlToText(targetSnapshot.rawHtml) : "";
+
+    const existingBlockLabels = targetSnapshot.detectedBlocks.map((b) => BLOCK_LABELS_RU[b] ?? b);
+
+    const [quickFixesRaw, pageStructureRaw, readyContentRaw, semanticAnalysis] = await Promise.all([
+      generateQuickFixes(report.url, brief, comparisons, analytics, siteType, existingBlockLabels),
+      analyzePageWithGemini(report.url, competitorDomains, targetSnapshot, sitePaths),
+      isPro ? generateReadyContent(report.url, brief, siteType, targetPageText) : Promise.resolve(null),
+      computeSemanticAnalysis({
+        targetKeyword: brief.targetKeyword ?? serpQuery,
+        targetPageText,
+        targetHeadings: targetSnapshot.headings,
+        competitors: compSnapshots.map((snap, i) => ({
+          domain: topCompetitors[i]?.domain ?? "",
+          position: topCompetitors[i]?.position ?? i + 1,
+          pageText: snap.rawHtml && !snap.fetchError ? htmlToText(snap.rawHtml) : "",
+          headings: snap.headings,
+        })),
+        gscRows,
+      }).catch((err) => {
+        console.warn("[semantic] non-fatal error:", err);
+        return null;
+      }),
     ]);
+
+    // Страховка от галлюцинаций Gemini: блок, найденный скрейпером, не может быть «отсутствующим»
+    const pageStructure = pageStructureRaw
+      ? {
+          ...pageStructureRaw,
+          recommendedBlocks: pageStructureRaw.recommendedBlocks.filter(
+            (rec) => !blockAlreadyDetected(rec.name, targetSnapshot.detectedBlocks)
+          ),
+        }
+      : pageStructureRaw;
+
+    // Страж фактов: выдуманные цены/гарантии/цифры → плейсхолдеры
+    const quickFixes = quickFixesRaw.map((f) => ({
+      ...f,
+      action: sanitizeFacts(f.action, targetPageText),
+    }));
+    const readyContent = readyContentRaw
+      ? {
+          ...readyContentRaw,
+          introParagraph: sanitizeFacts(readyContentRaw.introParagraph, targetPageText),
+          faqItems: readyContentRaw.faqItems.map((item) => ({
+            ...item,
+            answer: sanitizeFacts(item.answer, targetPageText),
+          })),
+        }
+      : null;
+
+    // Дедупликация: рекомендации, уже попавшие в quickFixes, в сравнениях помечаем
+    const dedupedComparisons = markCoveredRecommendations(comparisons, quickFixes);
+
+    // Сквозная дедупликация тем: quickFixes + матрица блоков — канон,
+    // из текстовых рекомендаций брифа и E-E-A-T убираем полностью покрытые темы
+    const canonicalTexts = [
+      ...quickFixes.map((f) => `${f.action} ${f.why}`),
+      ...blockMatrix.map((b) => `${b.block} ${b.tip}`),
+    ];
+    if (brief.additionalRecommendations?.length) {
+      brief.additionalRecommendations = filterCoveredTexts(brief.additionalRecommendations, canonicalTexts);
+    }
+    if (brief.eeatAnalysis?.recommendations?.length) {
+      brief.eeatAnalysis.recommendations = filterCoveredTexts(
+        brief.eeatAnalysis.recommendations,
+        [...canonicalTexts, ...(brief.additionalRecommendations ?? [])]
+      );
+    }
+
+    // Дословные улики с страниц конкурентов (без AI)
+    const competitorEvidence = buildCompetitorEvidence(compSnapshots, topCompetitors);
 
     // Тип страницы + схема + паттерны
     const pageType = detectPageType(report.url);
@@ -229,7 +352,7 @@ export async function processReport(reportId: string) {
     const result = {
       brief,
       analytics,
-      comparisons,
+      comparisons: dedupedComparisons,
       blockMatrix,
       quickFixes,
       schemaResult,
@@ -238,6 +361,8 @@ export async function processReport(reportId: string) {
       missingTerms,
       readyContent,
       competitors,
+      competitorEvidence,
+      semanticAnalysis,
       pageSpeed,
       siteType,
       domainInfo: Object.fromEntries(domainInfo.map((d) => [d.domain, d])),

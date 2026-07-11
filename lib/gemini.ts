@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import type { SEOBrief, SchemaResult } from "./claude";
-import type { SiteType } from "./scraper";
+import { BLOCK_LABELS_RU, type SiteType, type PageSnapshot } from "./scraper";
+import { htmlToText } from "./factGuard";
 
 // ─────────────────────────────────────────
 // ТИПЫ: анализ структуры страницы
@@ -98,28 +99,59 @@ function getMockPageAnalysis(): PageStructureAnalysis {
   };
 }
 
-export async function analyzePageWithGemini(url: string, competitorDomains: string[] = []): Promise<PageStructureAnalysis> {
+export async function analyzePageWithGemini(
+  url: string,
+  competitorDomains: string[] = [],
+  targetSnapshot?: PageSnapshot,
+  sitePaths: string[] = []
+): Promise<PageStructureAnalysis> {
   if (USE_MOCK) return getMockPageAnalysis();
 
-  const html = await fetchHtml(url);
-  if (!html) return getMockPageAnalysis();
+  // Верхнеуровневые разделы сайта — чтобы не советовать «заведите блог» сайту с блогом
+  const sections = [...new Set(
+    sitePaths.map((p) => "/" + (p.split("/").filter(Boolean)[0] ?? "")).filter((s) => s !== "/")
+  )].slice(0, 30);
+  const sectionsHint = sections.length > 0
+    ? `\nРАЗДЕЛЫ САЙТА, КОТОРЫЕ УЖЕ СУЩЕСТВУЮТ (не предлагать их создать): ${sections.join(", ")}\n`
+    : "";
+
+  // Полный HTML страницы может быть мегабайты — «первые 80К» это шапка и стили.
+  // Если есть снапшот скрейпера, работаем с чистым текстом ВСЕЙ страницы + его находками.
+  let pageBlock: string;
+  let detectedHint = "";
+
+  if (targetSnapshot?.rawHtml && !targetSnapshot.fetchError) {
+    const text = htmlToText(targetSnapshot.rawHtml).slice(0, 30_000);
+    const detected = targetSnapshot.detectedBlocks.map((b) => BLOCK_LABELS_RU[b] ?? b);
+    detectedHint = detected.length > 0
+      ? `\nБЛОКИ, УЖЕ ОБНАРУЖЕННЫЕ НА СТРАНИЦЕ АВТОМАТИЧЕСКИ (это факт, их НЕ предлагать как отсутствующие): ${detected.join(", ")}\n`
+      : "";
+    pageBlock = `ЗАГОЛОВКИ СТРАНИЦЫ (H2/H3):
+${targetSnapshot.headings.map((h) => `- ${h}`).join("\n") || "нет"}
+
+ПОЛНЫЙ ТЕКСТ СТРАНИЦЫ (без разметки):
+${text}`;
+  } else {
+    const html = await fetchHtml(url);
+    if (!html) return getMockPageAnalysis();
+    pageBlock = `HTML СТРАНИЦЫ (первые 80К символов):\n${html}`;
+  }
 
   const competitorsHint = competitorDomains.length > 0
     ? `Конкуренты в топе: ${competitorDomains.slice(0, 5).join(", ")}`
     : "";
 
-  const prompt = `Ты — SEO-специалист и UX-эксперт. Проанализируй HTML страницы и определи её структуру.
+  const prompt = `Ты — SEO-специалист и UX-эксперт. Проанализируй страницу и определи её структуру.
 
 URL: ${url}
 ${competitorsHint}
-
-HTML СТРАНИЦЫ (первые 80К символов):
-${html}
+${detectedHint}${sectionsHint}
+${pageBlock}
 
 Задача:
-1. Определи какие блоки/секции уже есть на странице (перечисли конкретно: "Форма заявки", "Блок цен", "Галерея работ", "FAQ", "Отзывы", "Калькулятор", "Карта", "Видео", "Сертификаты/лицензии" и т.д.)
+1. Определи какие блоки/секции уже есть на странице (перечисли конкретно: "Форма заявки", "Блок цен", "Галерея работ", "FAQ", "Отзывы", "Калькулятор", "Карта", "Видео", "Сертификаты/лицензии" и т.д.). Включи в existingBlocks и все блоки из списка обнаруженных автоматически.
 2. Определи тип сайта: "ecommerce" | "local" | "content"
-3. Предложи 4–6 блоков которых НЕТ, но которые стоит добавить для улучшения SEO и конверсии
+3. Предложи 4–6 блоков которых ДЕЙСТВИТЕЛЬНО НЕТ (перепроверь по тексту и списку обнаруженных!), но которые стоит добавить для улучшения SEO и конверсии
 
 Для каждого рекомендуемого блока:
 - name: конкретное название ("Блок с отзывами и рейтингом", "Калькулятор стоимости", "FAQ-раздел")

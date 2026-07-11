@@ -6,6 +6,13 @@ export interface GscRow {
   position: number; // средняя позиция
 }
 
+// Строка из экспорта вкладки «Страницы» (URL), а не «Запросы».
+// Пользователи грузят несколько CSV разом — URL-строки нельзя смешивать с запросами.
+export function isUrlQuery(query: string): boolean {
+  const q = query.trim();
+  return /^https?:\/\//i.test(q) || /^[a-z0-9а-яё.-]+\.[a-zа-я]{2,}\//i.test(q);
+}
+
 // Правильный парсер CSV с поддержкой quoted fields (RFC 4180)
 function splitLine(line: string, delimiter: string): string[] {
   const result: string[] = [];
@@ -115,7 +122,7 @@ export function parseGscCsvDetailed(text: string): ParseResult {
     if (cols.length < 2) continue;
 
     const query = (cols[qi] ?? "").replace(/^"|"$/g, "");
-    if (!query) continue;
+    if (!query || isUrlQuery(query)) continue;
 
     // CTR: "6.52%", "0.065", "6,52%"
     const rawCtr = (cols[ctri] ?? "0").replace("%", "").replace(",", ".");

@@ -1,5 +1,5 @@
 import type { SerpResult, KeywordData, DomainInfo } from "./dataforseo";
-import type { GscRow } from "./gsc";
+import { isUrlQuery, type GscRow } from "./gsc";
 
 // ─────────────────────────────────────────
 // ТИПЫ
@@ -151,6 +151,9 @@ export function computeAnalytics(
   domainInfo: DomainInfo[],
   gscRows: GscRow[]
 ): AnalyticsResult {
+  // Страховка от старых загрузок: URL-строки из вкладки «Страницы» — не запросы
+  gscRows = gscRows.filter((r) => !isUrlQuery(r.query));
+
   const gscMap = new Map<string, GscRow>(
     gscRows.map((r) => [r.query.toLowerCase(), r])
   );

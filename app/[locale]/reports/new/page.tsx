@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,15 @@ export default function NewReportPage() {
   const [gscError, setGscError] = useState("");
   const [showNoGscWarning, setShowNoGscWarning] = useState(false);
   const [locationCode, setLocationCode] = useState(2840);
+  const [gscConnected, setGscConnected] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch("/api/gsc")
+      .then((r) => r.json())
+      .then((data) => setGscConnected(!!data.connected))
+      .catch(() => {});
+  }, []);
 
   function mergeGscRows(allRows: GscRow[][]): GscRow[] {
     const map = new Map<string, GscRow>();
@@ -115,7 +123,8 @@ export default function NewReportPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!gscRows) {
+    // Если Search Console подключён — данные подтянутся по API, CSV не нужен
+    if (!gscRows && !gscConnected) {
       setShowNoGscWarning(true);
       return;
     }
@@ -178,6 +187,26 @@ export default function NewReportPage() {
               <p className="text-xs text-muted-foreground">
                 Загрузи CSV из GSC → Эффективность → Запросы → Экспорт. Улучшает анализ: gap, quick wins, бриф.
               </p>
+
+              {!gscConnected && (
+                <a
+                  href="/api/gsc/connect"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  Или подключи Search Console — данные будут подтягиваться автоматически, без CSV
+                </a>
+              )}
+
+              {gscConnected && !gscRows && (
+                <div className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 dark:border-green-800/50 dark:bg-green-900/20 px-3 py-2.5 text-sm text-green-800 dark:text-green-300">
+                  <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>
+                    Search Console подключён — запросы и позиции подтянутся автоматически.
+                    CSV можно не загружать.
+                  </span>
+                </div>
+              )}
 
               {!gscRows ? (
                 <div

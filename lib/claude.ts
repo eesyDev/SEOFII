@@ -8,6 +8,7 @@ import type { GscRow } from "./gsc";
 import type { PageSnapshot, SiteType } from "./scraper";
 import type { MissingTerm } from "./termAnalyzer";
 import { extractExcerpt } from "./termAnalyzer";
+import { htmlToText } from "./factGuard";
 
 const USE_MOCK = !process.env.ANTHROPIC_API_KEY;
 
@@ -60,6 +61,7 @@ export interface ContentGap {
   priority: "high" | "medium" | "low";
   trafficPotential: string;
   rationale: string;
+  existingUrl?: string; // на сайте нашлась похожая страница — предупреждаем, а не советуем создать
 }
 
 export interface SEOBrief {
@@ -83,6 +85,7 @@ export interface ComparisonReason {
   finding: string;       // "У него 2400 слов, у тебя 820"
   recommendation: string; // "Расширь до 2000+ слов — добавь раздел про X"
   impact: "high" | "medium" | "low";
+  coveredByQuickFix?: boolean; // рекомендация уже есть в списке задач — не повторяем текст
 }
 
 export interface CompetitorComparison {
@@ -439,7 +442,8 @@ export async function generateSEOBrief(
   siteType: SiteType = "content",
   targetSnapshot?: PageSnapshot,
   compSnapshots: PageSnapshot[] = [],
-  missingTerms: MissingTerm[] = []
+  missingTerms: MissingTerm[] = [],
+  existingPaths: string[] = []
 ): Promise<{ brief: SEOBrief; costUsd: number }> {
   if (USE_MOCK) return getMockBrief(targetUrl, competitors);
 
@@ -531,6 +535,13 @@ ${headings}
 `;
   }
 
+  const existingPathsBlock = existingPaths.length > 0
+    ? `
+СУЩЕСТВУЮЩИЕ СТРАНИЦЫ САЙТА (из sitemap и меню — эти страницы УЖЕ ЕСТЬ, не предлагай их создать в contentGaps):
+${existingPaths.slice(0, 120).map((p) => `- ${p}`).join("\n")}
+`
+    : "";
+
   const prompt = `Ты — SEO-эксперт с опытом работы в рунете. Твоя задача — не шаблонный аудит, а конкретный план для этой конкретной страницы.
 
 ГЛАВНОЕ ПРАВИЛО: Каждая рекомендация должна основываться на реальных данных из этого промпта.
@@ -549,7 +560,7 @@ ${competitorList}
 ${keywordList}
 ${buildMissingTermsBlock(missingTerms, competitors.length)}
 ${buildExcerptsBlock(competitors, compSnapshots)}
-${gscBlock}
+${gscBlock}${existingPathsBlock}
 Верни JSON строго по схеме ниже. Без markdown-обёртки.
 
 {
@@ -587,7 +598,7 @@ ${gscBlock}
 
   "contentGaps": [
     {
-      "topic": "Конкретная тема/страница которой нет у анализируемого сайта но есть у 2+ конкурентов",
+      "topic": "Конкретная тема/страница которой нет у анализируемого сайта (сверься со списком существующих страниц!) но есть у 2+ конкурентов",
       "suggestedSlug": "/url-slug",
       "priority": "high|medium|low",
       "trafficPotential": "оценка на основе объёмов ключей выше или GSC-данных",
@@ -656,6 +667,9 @@ export async function generateComparisons(
   if (USE_MOCK) return getMockComparisons(competitorSnapshots.map((s, i) => competitors[i] ?? { position: i + 1, url: s.url, domain: "", title: "", snippet: "" }));
 
   const targetText = snapshotText(targetSnapshot);
+  const targetBody = targetSnapshot.rawHtml
+    ? htmlToText(targetSnapshot.rawHtml).slice(0, 1800)
+    : "";
 
   const comparisonsData = await Promise.all(
     competitorSnapshots.map(async (compSnap, idx) => {
@@ -663,17 +677,24 @@ export async function generateComparisons(
       if (!comp) return null;
 
       const compText = snapshotText(compSnap);
+      const compBody = compSnap.rawHtml
+        ? htmlToText(compSnap.rawHtml).slice(0, 1800)
+        : "";
 
       const prompt = `Ты SEO-аналитик. Сравни две страницы и дай РОВНО 5 конкретных причин почему конкурент ранжируется выше.
 
 СТРАНИЦА ПОЛЬЗОВАТЕЛЯ (позиция: не в топ-10 или ниже конкурента):
 ${targetText}
+${targetBody ? `Начало текста страницы: """${targetBody}"""` : ""}
 
 КОНКУРЕНТ (позиция #${comp.position}):
 ${compText}
+${compBody ? `Начало текста конкурента: """${compBody}"""` : ""}
 
 Правила:
 - Каждая причина должна называть КОНКРЕТНЫЕ цифры или факты из данных выше
+- В finding ЦИТИРУЙ дословно фрагмент текста или заголовок конкурента как доказательство (в кавычках «...»)
+- Прежде чем советовать добавить блок — проверь по тексту пользователя, что его действительно нет
 - Не пиши общие советы — только то что видно из предоставленных данных
 - Формат recommendation — конкретное действие, например: "Добавьте раздел X объёмом 300 слов"
 - category: "content" | "structure" | "keywords" | "technical" | "eeat"
@@ -692,7 +713,7 @@ ${compText}
 
       const message = await anthropic.messages.create({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 1200,
+        max_tokens: 2200, // findings с дословными цитатами длиннее — 1200 обрезало JSON
         messages: [{ role: "user", content: prompt }],
       });
 
@@ -717,9 +738,14 @@ export async function generateQuickFixes(
   brief: SEOBrief,
   comparisons: CompetitorComparison[],
   analytics: AnalyticsResult,
-  siteType: SiteType = "content"
+  siteType: SiteType = "content",
+  existingBlockLabels: string[] = []
 ): Promise<QuickFix[]> {
   if (USE_MOCK) return getMockQuickFixes(targetUrl);
+
+  const existingBlocksLine = existingBlockLabels.length > 0
+    ? `\nНА СТРАНИЦЕ УЖЕ ЕСТЬ: ${existingBlockLabels.join(", ")}. НЕ советуй добавить эти блоки — только конкретные улучшения существующих, если есть что улучшить.\n`
+    : "";
 
   const topReasons = comparisons
     .flatMap((c) => c.reasons.filter((r) => r.impact === "high"))
@@ -753,10 +779,11 @@ ${topReasons || "Данных по сравнению нет"}
 
 Quick wins из GSC (запросы на позициях 5–20):
 ${quickWins || "Данных нет"}
-
+${existingBlocksLine}
 Правила:
 - Никаких SEO-терминов (не "E-E-A-T", не "DR", не "семантическое ядро")
 - Каждое действие — конкретное, с примером ("замените title на вот этот: ...")
+- НЕ ВЫДУМЫВАЙ факты о бизнесе клиента: цены, гарантии, годы опыта, число проектов, рейтинги. Если советуешь добавить такие цифры — пиши плейсхолдеры: "добавьте [ваш опыт в годах] и [число выполненных проектов]"
 - effort: "5min" (скопировать-вставить), "30min" (написать блок текста), "2hours" (большая правка)
 - category: "meta" | "content" | "links" | "technical"
 - Сортируй по impact: сначала самые быстрые и важные
@@ -1033,7 +1060,8 @@ function getMockReadyContent(targetUrl: string, brief: SEOBrief): ReadyContent {
 export async function generateReadyContent(
   targetUrl: string,
   brief: SEOBrief,
-  siteType: SiteType = "content"
+  siteType: SiteType = "content",
+  pageText?: string
 ): Promise<ReadyContent> {
   if (USE_MOCK) return getMockReadyContent(targetUrl, brief);
 
@@ -1041,6 +1069,10 @@ export async function generateReadyContent(
     siteType === "ecommerce" ? "Product + Offer" :
     siteType === "local"     ? "LocalBusiness" :
                                "Article + FAQPage";
+
+  const pageFacts = pageText
+    ? `\nРЕАЛЬНЫЙ ТЕКСТ СТРАНИЦЫ КЛИЕНТА (единственный источник фактов о бизнесе):\n"""${pageText.slice(0, 4000)}"""\n`
+    : "";
 
   const prompt = `Ты SEO-копирайтер. Создай готовый контент для страницы — всё что можно сразу скопировать и вставить на сайт.
 
@@ -1053,13 +1085,18 @@ URL: ${targetUrl}
 - Meta: ${brief.recommendedMetaDescription}
 - Объём: ${brief.wordCountRecommendation} слов
 - Ключи для включения: ${brief.topKeywordsToInclude.slice(0, 8).join(", ")}
+${pageFacts}
+ЖЕЛЕЗНОЕ ПРАВИЛО — НЕ ВЫДУМЫВАЙ ФАКТЫ О БИЗНЕСЕ:
+- Цены, сроки, гарантии, годы опыта, количество проектов/клиентов, рейтинги — ТОЛЬКО если они есть в тексте страницы выше
+- Если факт нужен, но его нет на странице — вставь плейсхолдер в квадратных скобках: [укажите цену], [срок гарантии], [ваш опыт]
+- Этот текст владелец вставит на сайт как есть. Выдуманная цена или гарантия = юридическая проблема клиента
 
 Правила:
 - title: строго до 60 символов, содержит ключ, без кликбейта
 - h1: до 70 символов, естественный язык
 - metaDescription: до 155 символов, продающий, с призывом
 - introParagraph: 100–150 слов, ключ в первом предложении, отвечает на запрос, без воды
-- faqItems: ровно 5 реальных вопросов. Ответ 50–80 слов, конкретный
+- faqItems: ровно 5 реальных вопросов. Ответ 50–80 слов, конкретный, факты — только со страницы или плейсхолдер
 - schemaMarkup: валидный JSON-LD для ${schemaType}, готовый для вставки в <script type="application/ld+json">
 
 Отвечай ТОЛЬКО JSON:

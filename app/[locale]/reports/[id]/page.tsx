@@ -23,7 +23,12 @@ import { SummaryCards } from "@/components/report/summary-cards";
 import { VolumeChart, GscPositionsChart } from "@/components/report/report-charts";
 import { KeywordTable } from "@/components/report/keyword-table";
 import { CompetitorComparisonSection } from "@/components/report/competitor-comparison";
+import { CompetitorEvidenceSection } from "@/components/report/competitor-evidence";
+import type { CompetitorEvidence } from "@/lib/competitorEvidence";
+import { SemanticRelevanceCard, SemanticClustersSection } from "@/components/report/semantic-section";
+import type { SemanticAnalysis } from "@/lib/semantic";
 import { QuickFixesSection } from "@/components/report/quick-fixes";
+import { QuickWinsSection } from "@/components/report/quick-wins";
 import { BlockMatrixSection } from "@/components/report/block-matrix";
 import { SpeedCard } from "@/components/report/speed-card";
 import { ReadyContentSection, ReadyContentLocked } from "@/components/report/ready-content";
@@ -56,6 +61,8 @@ interface ReportResult {
   pageStructure?: PageStructureAnalysis | null;
   nichePatterns?: PatternInsight[] | null;
   missingTerms?: MissingTerm[] | null;
+  competitorEvidence?: CompetitorEvidence[] | null;
+  semanticAnalysis?: SemanticAnalysis | null;
 }
 
 const STATUS_CONFIG = {
@@ -193,6 +200,15 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
             {/* ── ТАБ 1: ЧТО ДЕЛАТЬ ── */}
             <TabsContent value="actions" className="space-y-4">
+              {result?.semanticAnalysis?.relevance && brief?.targetKeyword && (
+                <SemanticRelevanceCard
+                  relevance={result.semanticAnalysis.relevance}
+                  targetKeyword={brief.targetKeyword}
+                />
+              )}
+              {analytics && analytics.quickWins.length > 0 && (
+                <QuickWinsSection quickWins={analytics.quickWins} />
+              )}
               {readyContent
                 ? <ReadyContentSection readyContent={readyContent} />
                 : isFree
@@ -250,6 +266,10 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
                 ? <CompetitorComparisonSection comparisons={comparisons} isPro={!isFree} />
                 : <EmptyTab text="Создайте новый отчёт чтобы увидеть сравнение с конкурентами" />
               }
+
+              {result?.competitorEvidence && result.competitorEvidence.length > 0 && (
+                <CompetitorEvidenceSection evidence={result.competitorEvidence} />
+              )}
 
               {/* Таблица конкурентов с DR + скоростью */}
               {report.competitors.length > 0 && (
@@ -521,6 +541,9 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
             {/* ── ТАБ 4: КЛЮЧЕВЫЕ СЛОВА ── */}
             <TabsContent value="keywords" className="space-y-4">
+              {result?.semanticAnalysis && (
+                <SemanticClustersSection analysis={result.semanticAnalysis} />
+              )}
               {analytics ? (
                 <>
                   <div className={`grid gap-4 ${hasGsc ? "lg:grid-cols-2" : ""}`}>
@@ -656,6 +679,11 @@ function ContentGapRow({ gap }: { gap: ContentGap }) {
         <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-semibold ${p.className}`}>{p.label}</span>
       </div>
       <p className="text-xs text-muted-foreground font-mono">{gap.suggestedSlug}</p>
+      {gap.existingUrl && (
+        <p className="text-xs rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 px-2 py-1.5">
+          ⚠️ Похожая страница уже есть: <span className="font-mono">{gap.existingUrl}</span> — вместо создания новой усильте её
+        </p>
+      )}
       <p className="text-muted-foreground">{gap.rationale}</p>
       <p className="text-xs text-muted-foreground">Потенциал: {gap.trafficPotential}</p>
     </div>

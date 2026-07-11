@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChevronDown, ChevronUp, Swords } from "lucide-react";
+import { ChevronDown, ChevronUp, ListChecks, Swords } from "lucide-react";
 import type { CompetitorComparison, ComparisonReason } from "@/lib/claude";
 
 const IMPACT_CONFIG = {
@@ -57,7 +57,14 @@ function ComparisonCard({ comparison }: { comparison: CompetitorComparison }) {
                   </span>
                 </div>
                 <p className="text-sm font-medium leading-snug">{reason.finding}</p>
-                <p className="text-sm text-muted-foreground leading-snug">→ {reason.recommendation}</p>
+                {reason.coveredByQuickFix ? (
+                  <p className="text-xs text-muted-foreground leading-snug inline-flex items-center gap-1">
+                    <ListChecks className="h-3.5 w-3.5 shrink-0" />
+                    Действие уже в списке задач выше
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground leading-snug">→ {reason.recommendation}</p>
+                )}
               </div>
             );
           })}
