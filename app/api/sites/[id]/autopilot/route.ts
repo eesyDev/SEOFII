@@ -7,6 +7,9 @@ interface Params {
   params: Promise<{ id: string }>;
 }
 
+// Анализ до 10 страниц с AI-вызовами — дольше дефолтного лимита функции
+export const maxDuration = 300;
+
 // POST /api/sites/[id]/autopilot — run autopilot analysis
 export async function POST(_req: Request, { params }: Params) {
   const session = await auth();

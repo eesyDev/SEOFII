@@ -7,6 +7,22 @@ const USER_AGENT =
 
 export type SiteType = "ecommerce" | "content" | "local";
 
+// Человекочитаемые названия блоков, которые определяет эвристика скрейпера
+export const BLOCK_LABELS_RU: Record<string, string> = {
+  reviews: "Отзывы клиентов",
+  faq: "FAQ / вопросы-ответы",
+  price: "Цены / прайс",
+  comparison_table: "Таблица",
+  gallery: "Галерея работ",
+  social_proof: "Социальные доказательства (счётчики)",
+  team: "Команда / специалисты",
+  map: "Карта",
+  calculator: "Калькулятор",
+  chat: "Онлайн-чат",
+  form: "Форма заявки",
+  video: "Видео",
+};
+
 export interface PageSnapshot {
   url: string;
   title: string;
@@ -145,6 +161,114 @@ function detectSiteType(
   return "content";
 }
 
+// Полный набор браузерных заголовков: с датацентровых IP (Vercel) сайты
+// отвечают 401/403 на голый User-Agent, но многие пропускают правдоподобный запрос.
+// На 4xx — один ретрай с альтернативным UA.
+const BROWSER_HEADERS: Record<string, string> = {
+  "User-Agent": USER_AGENT,
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+  "Accept-Encoding": "gzip, deflate, br",
+  "Cache-Control": "no-cache",
+  "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+  "Sec-Ch-Ua-Mobile": "?0",
+  "Sec-Ch-Ua-Platform": '"macOS"',
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "cross-site",
+  "Sec-Fetch-User": "?1",
+  "Upgrade-Insecure-Requests": "1",
+  Referer: "https://www.google.com/",
+};
+
+const ALT_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+
+async function fetchWithBrowserHeaders(url: string): Promise<Response> {
+  const attempt = async (headers: Record<string, string>) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      return await fetch(url, { headers, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const first = await attempt(BROWSER_HEADERS);
+  if (first.status === 401 || first.status === 403 || first.status === 429) {
+    return attempt({ ...BROWSER_HEADERS, "User-Agent": ALT_USER_AGENT, "Sec-Ch-Ua-Platform": '"Windows"' });
+  }
+  return first;
+}
+
+// Fallback-добыча HTML через DataForSEO OnPage: их инфраструктура забирает
+// страницы, которые блокируют датацентровые IP (Vercel). ~$0.0003/страница.
+export async function fetchHtmlViaDataForSEO(url: string): Promise<string | null> {
+  const login = process.env.DATAFORSEO_LOGIN;
+  const password = process.env.DATAFORSEO_PASSWORD;
+  if (!login || !password) return null;
+
+  const headers = {
+    Authorization: `Basic ${Buffer.from(`${login}:${password}`).toString("base64")}`,
+    "Content-Type": "application/json",
+  };
+
+  try {
+    const res = await fetch("https://api.dataforseo.com/v3/on_page/instant_pages", {
+      method: "POST",
+      headers,
+      body: JSON.stringify([{ url, store_raw_html: true, accept_language: "ru-RU" }]),
+    });
+    const data = await res.json();
+    const task = data.tasks?.[0];
+    const pageStatus = task?.result?.[0]?.items?.[0]?.status_code;
+    if (!task?.id || pageStatus !== 200) {
+      console.warn(`[scraper] DFS instant_pages failed for ${url}: task=${task?.status_message}, page=${pageStatus}`);
+      return null;
+    }
+
+    // raw_html большой страницы сохраняется не мгновенно — ретраим с паузой
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 2500));
+      const rawRes = await fetch("https://api.dataforseo.com/v3/on_page/raw_html", {
+        method: "POST",
+        headers,
+        body: JSON.stringify([{ id: task.id }]),
+      });
+      const rawData = await rawRes.json();
+      const items = rawData.tasks?.[0]?.result?.[0]?.items;
+      // items приходит объектом { html }, но подстрахуемся и на массив
+      const html = items?.html ?? items?.[0]?.html;
+      if (typeof html === "string" && html.length > 500) return html;
+    }
+    console.warn(`[scraper] DFS raw_html empty after retries for ${url}`);
+    return null;
+  } catch (err) {
+    console.warn(`[scraper] DFS fallback error for ${url}:`, err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+async function obtainHtml(url: string): Promise<{ html: string } | { fetchError: string }> {
+  let directError: string;
+  try {
+    const res = await fetchWithBrowserHeaders(url);
+    if (res.ok) {
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("html")) return { fetchError: `Not HTML: ${contentType}` };
+      return { html: await res.text() };
+    }
+    directError = `HTTP ${res.status}`;
+  } catch (err) {
+    directError = err instanceof Error ? err.message : "Неизвестная ошибка";
+  }
+
+  const viaDfs = await fetchHtmlViaDataForSEO(url);
+  if (viaDfs) return { html: viaDfs };
+  return { fetchError: directError };
+}
+
 async function scrapePage(url: string): Promise<PageSnapshot> {
   const base: PageSnapshot = {
     url,
@@ -163,25 +287,12 @@ async function scrapePage(url: string): Promise<PageSnapshot> {
   };
 
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timer));
-
-    if (!res.ok) {
-      return { ...base, fetchError: `HTTP ${res.status}` };
+    const obtained = await obtainHtml(url);
+    if ("fetchError" in obtained) {
+      return { ...base, fetchError: obtained.fetchError };
     }
 
-    const contentType = res.headers.get("content-type") ?? "";
-    if (!contentType.includes("html")) {
-      return { ...base, fetchError: `Not HTML: ${contentType}` };
-    }
-
-    const html = await res.text();
-    const $ = cheerio.load(html);
+    const $ = cheerio.load(obtained.html);
 
     // Удаляем шум перед подсчётом слов
     $("script, style, noscript, nav, footer, header, [aria-hidden='true']").remove();

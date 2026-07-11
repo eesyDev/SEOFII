@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
+// Генерация отчёта занимает ~3–4 минуты — функция должна жить после ответа
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -47,15 +51,16 @@ export async function POST(req: NextRequest) {
     const { tasks } = await import("@trigger.dev/sdk/v3");
     await tasks.trigger("generate-report", { reportId: report.id });
   } else {
-    // Запускаем в фоне — НЕ ждём завершения.
-    // Это критично: если пользователь уходит со страницы, HTTP-соединение закрывается
-    // и await processReport() отменился бы вместе с ним. setImmediate отвязывает от запроса.
+    // Отвечаем сразу, генерацию продолжаем в фоне.
+    // waitUntil — обязательно для Vercel: без него serverless-функция
+    // завершается вместе с ответом и отчёт навсегда виснет в PENDING.
+    // Локально ведёт себя как обычный фоновый promise.
     const { processReport } = await import("@/lib/processReport");
-    setImmediate(() => {
+    waitUntil(
       processReport(report.id).catch((err) => {
         console.error(`[processReport] failed for ${report.id}:`, err);
-      });
-    });
+      })
+    );
   }
 
   return NextResponse.json({ reportId: report.id });

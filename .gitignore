@@ -32,3 +32,6 @@ Thumbs.db
 
 # Trigger.dev
 .trigger/
+.vercel
+.env*
+*.tsbuildinfo
