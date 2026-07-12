@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, XCircle, BarChart2 } from "lucide-react";
@@ -11,6 +12,9 @@ const TYPE_LABEL: Record<string, string> = {
   content: "Контент",
   technical: "Техническое",
   navigation: "Навигация",
+};
+const TYPE_LABEL_EN: Record<string, string> = {
+  conversion: "Conversion", trust: "Trust", content: "Content", technical: "Technical", navigation: "Navigation",
 };
 
 const TYPE_COLOR: Record<string, string> = {
@@ -37,6 +41,7 @@ function FrequencyBar({ value }: { value: number }) {
 }
 
 export function NichePatternsSection({ patterns }: { patterns: PatternInsight[] }) {
+  const en = useLocale() === "en";
   if (!patterns?.length) return null;
 
   const missing = patterns.filter((p) => !p.present);
@@ -46,11 +51,10 @@ export function NichePatternsSection({ patterns }: { patterns: PatternInsight[] 
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <BarChart2 className="h-4 w-4" /> Статистика ниши
+          <BarChart2 className="h-4 w-4" /> {en ? "Niche statistics" : "Статистика ниши"}
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Не про вашу страницу, а про нишу в целом: какие блоки и как часто встречаются у страниц
-          в топе — накоплено по многим выдачам. Процент = доля топовых страниц с этим блоком.
+          {en ? "Not about your page — about the niche: which blocks appear on top-ranking pages and how often, accumulated across many SERPs. Percentage = share of top pages with this block." : "Не про вашу страницу, а про нишу в целом: какие блоки и как часто встречаются у страниц в топе — накоплено по многим выдачам. Процент = доля топовых страниц с этим блоком."}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -59,7 +63,7 @@ export function NichePatternsSection({ patterns }: { patterns: PatternInsight[] 
         {missing.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Не хватает ({missing.length})
+              {en ? "Missing" : "Не хватает"} ({missing.length})
             </p>
             <div className="space-y-2">
               {missing.map((p, i) => (
@@ -70,7 +74,7 @@ export function NichePatternsSection({ patterns }: { patterns: PatternInsight[] 
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium">{p.label}</p>
                         <span className={`inline-flex text-[10px] px-1.5 py-0.5 rounded border ${TYPE_COLOR[p.patternType] ?? TYPE_COLOR.technical}`}>
-                          {TYPE_LABEL[p.patternType] ?? p.patternType}
+                          {en ? TYPE_LABEL_EN[p.patternType] ?? p.patternType : TYPE_LABEL[p.patternType] ?? p.patternType}
                         </span>
                       </div>
                       <FrequencyBar value={p.frequency} />
@@ -89,7 +93,7 @@ export function NichePatternsSection({ patterns }: { patterns: PatternInsight[] 
         {present.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Уже есть ({present.length})
+              {en ? "Already present" : "Уже есть"} ({present.length})
             </p>
             <div className="flex flex-wrap gap-2">
               {present.map((p, i) => (

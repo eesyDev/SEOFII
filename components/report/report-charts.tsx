@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale } from "next-intl";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
@@ -20,6 +21,7 @@ const TAG_COLOR: Record<string, string> = {
 };
 
 export function VolumeChart({ keywords }: { keywords: EnrichedKeyword[] }) {
+  const en = useLocale() === "en";
   const data = keywords
     .slice(0, 15)
     .map((k) => ({
@@ -36,7 +38,7 @@ export function VolumeChart({ keywords }: { keywords: EnrichedKeyword[] }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
-          <BarChart2 className="h-4 w-4" /> Объём поиска — топ ключей
+          <BarChart2 className="h-4 w-4" /> {en ? "Search volume — top keywords" : "Объём поиска — топ ключей"}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -59,7 +61,7 @@ export function VolumeChart({ keywords }: { keywords: EnrichedKeyword[] }) {
             />
             <Tooltip
               formatter={(value, _, entry) => [
-                Number(value).toLocaleString() + " / мес",
+                Number(value).toLocaleString() + (en ? " / mo" : " / мес"),
                 (entry as any)?.payload?.fullName ?? "",
               ]}
               labelFormatter={() => ""}
@@ -76,7 +78,7 @@ export function VolumeChart({ keywords }: { keywords: EnrichedKeyword[] }) {
         {/* Легенда */}
         <div className="flex flex-wrap gap-3 mt-3 text-xs text-muted-foreground">
           {[
-            { tag: "top3",      label: "Топ-3" },
+            { tag: "top3",      label: en ? "Top-3" : "Топ-3" },
             { tag: "quick-win", label: "Quick win" },
             { tag: "gap",       label: "Gap" },
             { tag: "owned",     label: "Owned" },
@@ -111,6 +113,7 @@ function bucketRows(rows: GscRow[]) {
 }
 
 export function GscPositionsChart({ gscRows }: { gscRows: GscRow[] }) {
+  const en = useLocale() === "en";
   if (gscRows.length === 0) return null;
 
   const data = bucketRows(gscRows);
@@ -119,7 +122,7 @@ export function GscPositionsChart({ gscRows }: { gscRows: GscRow[] }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
-          <Zap className="h-4 w-4" /> Распределение позиций GSC
+          <Zap className="h-4 w-4" /> {en ? "GSC position distribution" : "Распределение позиций GSC"}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -138,7 +141,7 @@ export function GscPositionsChart({ gscRows }: { gscRows: GscRow[] }) {
               allowDecimals={false}
             />
             <Tooltip
-              formatter={(v) => [Number(v), "запросов"]}
+              formatter={(v) => [Number(v), en ? "queries" : "запросов"]}
               contentStyle={{ fontSize: 12, borderRadius: 8 }}
             />
             <Bar dataKey="count" radius={[4, 4, 0, 0]}>
@@ -149,7 +152,7 @@ export function GscPositionsChart({ gscRows }: { gscRows: GscRow[] }) {
           </BarChart>
         </ResponsiveContainer>
         <p className="text-xs text-muted-foreground mt-1 text-center">
-          Позиция в поиске (средняя за период)
+          {en ? "Search position (period average)" : "Позиция в поиске (средняя за период)"}
         </p>
       </CardContent>
     </Card>

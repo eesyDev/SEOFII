@@ -1,13 +1,14 @@
+import { useLocale } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Gauge } from "lucide-react";
 import type { PageSpeedData } from "@/lib/pagespeed";
 
 const SCORE_CONFIG = (score: number) =>
   score >= 90
-    ? { label: "Хорошо",           color: "text-green-600 dark:text-green-400",  ring: "bg-green-500", bar: "bg-green-500" }
+    ? { label: "Хорошо", labelEn: "Good",           color: "text-green-600 dark:text-green-400",  ring: "bg-green-500", bar: "bg-green-500" }
     : score >= 50
-    ? { label: "Требует улучшений", color: "text-yellow-600 dark:text-yellow-400", ring: "bg-yellow-500", bar: "bg-yellow-500" }
-    : { label: "Плохо",            color: "text-red-600 dark:text-red-400",       ring: "bg-red-500",    bar: "bg-red-500"   };
+    ? { label: "Требует улучшений", labelEn: "Needs improvement", color: "text-yellow-600 dark:text-yellow-400", ring: "bg-yellow-500", bar: "bg-yellow-500" }
+    : { label: "Плохо", labelEn: "Poor",            color: "text-red-600 dark:text-red-400",       ring: "bg-red-500",    bar: "bg-red-500"   };
 
 function ScoreRing({ score }: { score: number }) {
   const cfg = SCORE_CONFIG(score);
@@ -44,7 +45,7 @@ interface MetricProps {
   unit?: string;
 }
 
-function Metric({ label, value, good, poor }: MetricProps) {
+function Metric({ label, value, good, poor, en }: MetricProps & { en: boolean }) {
   if (!value) return (
     <div className="rounded-lg border p-3 space-y-1">
       <p className="text-xs text-muted-foreground">{label}</p>
@@ -65,7 +66,7 @@ function Metric({ label, value, good, poor }: MetricProps) {
     <div className="rounded-lg border p-3 space-y-1">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className={`text-lg font-bold ${color}`}>{value}</p>
-      <p className="text-[10px] text-muted-foreground">хорошо ≤ {good}</p>
+      <p className="text-[10px] text-muted-foreground">{en ? "good" : "хорошо"} ≤ {good}</p>
     </div>
   );
 }
@@ -82,6 +83,7 @@ interface Props {
 }
 
 export function SpeedCard({ targetUrl, targetSpeed, competitorSpeeds }: Props) {
+  const en = useLocale() === "en";
   const hasData = targetSpeed.score != null && !targetSpeed.fetchError;
   const domain = (() => { try { return new URL(targetUrl).hostname; } catch { return targetUrl; } })();
 
@@ -89,18 +91,18 @@ export function SpeedCard({ targetUrl, targetSpeed, competitorSpeeds }: Props) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <Gauge className="h-4 w-4" /> Скорость страницы (mobile)
+          <Gauge className="h-4 w-4" /> {en ? "Page speed (mobile)" : "Скорость страницы (mobile)"}
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Google Lighthouse — чем выше балл, тем лучше для SEO и конверсии
+          {en ? "Google Lighthouse — the higher the score, the better for SEO and conversion" : "Google Lighthouse — чем выше балл, тем лучше для SEO и конверсии"}
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
         {!hasData ? (
           <p className="text-sm text-muted-foreground">
             {targetSpeed.fetchError
-              ? `Не удалось получить данные: ${targetSpeed.fetchError}`
-              : "Данные скорости недоступны"}
+              ? (en ? `Could not fetch data: ${targetSpeed.fetchError}` : `Не удалось получить данные: ${targetSpeed.fetchError}`)
+              : en ? "Speed data unavailable" : "Данные скорости недоступны"}
           </p>
         ) : (
           <>
@@ -114,10 +116,10 @@ export function SpeedCard({ targetUrl, targetSpeed, competitorSpeeds }: Props) {
                 <p className="text-[10px] text-muted-foreground truncate max-w-[80px] text-center">{domain}</p>
               </div>
               <div className="grid grid-cols-2 gap-2 flex-1">
-                <Metric label="LCP" value={targetSpeed.lcp} good="2.5 s" poor="4 s" />
-                <Metric label="FCP" value={targetSpeed.fcp} good="1.8 s" poor="3 s" />
-                <Metric label="TBT" value={targetSpeed.tbt} good="200 ms" poor="600 ms" />
-                <Metric label="CLS" value={targetSpeed.cls} good="0.1" poor="0.25" />
+                <Metric en={en} label="LCP" value={targetSpeed.lcp} good="2.5 s" poor="4 s" />
+                <Metric en={en} label="FCP" value={targetSpeed.fcp} good="1.8 s" poor="3 s" />
+                <Metric en={en} label="TBT" value={targetSpeed.tbt} good="200 ms" poor="600 ms" />
+                <Metric en={en} label="CLS" value={targetSpeed.cls} good="0.1" poor="0.25" />
               </div>
             </div>
 
@@ -125,12 +127,12 @@ export function SpeedCard({ targetUrl, targetSpeed, competitorSpeeds }: Props) {
             {competitorSpeeds.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Сравнение с конкурентами
+                  {en ? "Vs competitors" : "Сравнение с конкурентами"}
                 </p>
                 <div className="space-y-2">
                   {/* Ваша строка */}
                   <SpeedBarRow
-                    label={`${domain} (вы)`}
+                    label={`${domain} ${en ? "(you)" : "(вы)"}`}
                     score={targetSpeed.score!}
                     isYou
                   />
@@ -150,10 +152,9 @@ export function SpeedCard({ targetUrl, targetSpeed, competitorSpeeds }: Props) {
             {/* Что это значит */}
             {targetSpeed.score! < 50 && (
               <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/20 px-4 py-3 text-sm">
-                <p className="font-medium text-red-700 dark:text-red-400 mb-1">Низкая скорость влияет на позиции</p>
+                <p className="font-medium text-red-700 dark:text-red-400 mb-1">{en ? "Slow pages lose rankings" : "Низкая скорость влияет на позиции"}</p>
                 <p className="text-red-600 dark:text-red-500 text-xs">
-                  Google использует Core Web Vitals как фактор ранжирования. Страницы с LCP &gt; 4s теряют позиции.
-                  Обратитесь к разработчику — оптимизация обычно занимает 1–2 дня.
+                  {en ? <>Google uses Core Web Vitals as a ranking factor. Pages with LCP &gt; 4s lose positions. Ask your developer — optimization usually takes 1–2 days.</> : <>Google использует Core Web Vitals как фактор ранжирования. Страницы с LCP &gt; 4s теряют позиции. Обратитесь к разработчику — оптимизация обычно занимает 1–2 дня.</>}
                 </p>
               </div>
             )}

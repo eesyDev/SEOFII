@@ -485,9 +485,14 @@ export async function applyChange(changeId: string) {
       }
     }
 
+    // Фиксируем позицию «до»: GSC-данные отстают на ~3 дня, так что замер
+    // в момент применения отражает состояние ДО правки. «После» замерит крон через 7 дней.
+    const { gscAvgPosition } = await import("./cronJobs");
+    const rankingBefore = await gscAvgPosition(site.userId, change.pageUrl);
+
     await prisma.autoPilotChange.update({
       where: { id: changeId },
-      data: { status: "APPLIED", appliedAt: new Date() },
+      data: { status: "APPLIED", appliedAt: new Date(), rankingBefore },
     });
 
     if (pageRecord) {

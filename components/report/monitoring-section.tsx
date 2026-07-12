@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity, TrendingUp, TrendingDown, Minus } from "lucide-react";
@@ -29,6 +30,7 @@ interface MonitoringData {
 }
 
 export function MonitoringSection({ data }: { data: MonitoringData }) {
+  const en = useLocale() === "en";
   const improved = data.outcomes.filter((o) => o.delta < -0.5);
   const declined = data.outcomes.filter((o) => o.delta > 0.5);
 
@@ -37,11 +39,11 @@ export function MonitoringSection({ data }: { data: MonitoringData }) {
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <Activity className="h-4 w-4 text-green-500" />
-          Мониторинг страницы
+          {en ? "Page monitoring" : "Мониторинг страницы"}
           {data.isActive && (
             <span className="ml-auto text-xs font-normal text-green-600 dark:text-green-400 flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-              Активен
+              {en ? "Active" : "Активен"}
             </span>
           )}
         </CardTitle>
@@ -52,16 +54,16 @@ export function MonitoringSection({ data }: { data: MonitoringData }) {
         {data.outcomes.length > 0 && (
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-widest mb-3">
-              Результат изменений (из GSC)
+              {en ? "Impact of changes (GSC)" : "Результат изменений (из GSC)"}
             </p>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3 text-center">
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400">{improved.length}</p>
-                <p className="text-xs text-muted-foreground">запросов улучшились</p>
+                <p className="text-xs text-muted-foreground">{en ? "queries improved" : "запросов улучшились"}</p>
               </div>
               <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-center">
                 <p className="text-2xl font-bold text-red-500">{declined.length}</p>
-                <p className="text-xs text-muted-foreground">запросов упали</p>
+                <p className="text-xs text-muted-foreground">{en ? "queries dropped" : "запросов упали"}</p>
               </div>
             </div>
             <div className="space-y-1.5">
@@ -76,7 +78,7 @@ export function MonitoringSection({ data }: { data: MonitoringData }) {
         {data.changes.length > 0 && (
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-widest mb-3">
-              Что изменилось на странице
+              {en ? "What changed on the page" : "Что изменилось на странице"}
             </p>
             <div className="space-y-2">
               {data.changes.map((c) => (
@@ -98,7 +100,7 @@ export function MonitoringSection({ data }: { data: MonitoringData }) {
 
         {data.changes.length === 0 && data.outcomes.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            Страница проверяется каждую неделю. Когда что-то изменится — покажем здесь.
+            {en ? "The page is checked weekly. Changes will appear here." : "Страница проверяется каждую неделю. Когда что-то изменится — покажем здесь."}
           </p>
         )}
       </CardContent>

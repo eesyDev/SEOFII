@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale } from "next-intl";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Check, Copy, FileCode, Lock, Sparkles } from "lucide-react";
@@ -8,6 +9,7 @@ import Link from "next/link";
 import type { ReadyContent } from "@/lib/claude";
 
 function CopyButton({ text }: { text: string }) {
+  const en = useLocale() === "en";
   const [copied, setCopied] = useState(false);
 
   function handleCopy() {
@@ -23,9 +25,9 @@ function CopyButton({ text }: { text: string }) {
       className="shrink-0 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted"
     >
       {copied ? (
-        <><Check className="h-3.5 w-3.5 text-green-500" /><span className="text-green-500">Скопировано</span></>
+        <><Check className="h-3.5 w-3.5 text-green-500" /><span className="text-green-500">{en ? "Copied" : "Скопировано"}</span></>
       ) : (
-        <><Copy className="h-3.5 w-3.5" /><span>Копировать</span></>
+        <><Copy className="h-3.5 w-3.5" /><span>{en ? "Copy" : "Копировать"}</span></>
       )}
     </button>
   );
@@ -58,15 +60,16 @@ interface Props {
 }
 
 export function ReadyContentSection({ readyContent }: Props) {
+  const en = useLocale() === "en";
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
-          Готовый контент — скопируй и вставь
+          {en ? "Ready content — copy & paste" : "Готовый контент — скопируй и вставь"}
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Все тексты оптимизированы под ключевой запрос и готовы к публикации
+          {en ? "All copy is optimized for the target query and ready to publish" : "Все тексты оптимизированы под ключевой запрос и готовы к публикации"}
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -107,12 +110,12 @@ export function ReadyContentSection({ readyContent }: Props) {
         </div>
 
         {/* Intro */}
-        <ContentRow label="Первый абзац" value={readyContent.introParagraph} />
+        <ContentRow label={en ? "Intro paragraph" : "Первый абзац"} value={readyContent.introParagraph} />
 
         {/* FAQ */}
         <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">FAQ — 5 вопросов и ответов</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{en ? "FAQ — 5 questions & answers" : "FAQ — 5 вопросов и ответов"}</p>
             <CopyButton text={readyContent.faqItems.map((f) => `В: ${f.question}\nО: ${f.answer}`).join("\n\n")} />
           </div>
           <div className="space-y-2">
@@ -144,18 +147,19 @@ export function ReadyContentSection({ readyContent }: Props) {
 }
 
 export function ReadyContentLocked() {
+  const en = useLocale() === "en";
   return (
     <Card className="relative overflow-hidden">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
-          Готовый контент — скопируй и вставь
+          {en ? "Ready content — copy & paste" : "Готовый контент — скопируй и вставь"}
         </CardTitle>
       </CardHeader>
       <CardContent>
         {/* Blurred preview */}
         <div className="space-y-3 blur-sm pointer-events-none select-none">
-          {["Title", "H1", "Meta Description", "Первый абзац"].map((label) => (
+          {["Title", "H1", "Meta Description", en ? "Intro paragraph" : "Первый абзац"].map((label) => (
             <div key={label} className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
               <div className="h-4 bg-muted rounded w-3/4" />
@@ -179,13 +183,13 @@ export function ReadyContentLocked() {
               <Lock className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="font-semibold text-sm">Готовый контент для Pro</p>
+              <p className="font-semibold text-sm">{en ? "Ready-to-paste content for Pro" : "Готовый контент для Pro"}</p>
               <p className="text-xs text-muted-foreground mt-1 max-w-[220px]">
-                Title, H1, meta description, первый абзац, FAQ и schema.org — всё готово к копипасту
+                {en ? "Title, H1, meta description, intro paragraph, FAQ and schema.org — all copy-paste ready" : "Title, H1, meta description, первый абзац, FAQ и schema.org — всё готово к копипасту"}
               </p>
             </div>
             <Button size="sm" asChild>
-              <Link href="/billing">Перейти на Pro</Link>
+              <Link href="/billing">{en ? "Upgrade to Pro" : "Перейти на Pro"}</Link>
             </Button>
           </div>
         </div>

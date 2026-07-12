@@ -57,6 +57,8 @@ interface Change {
   confidence: number | null;
   status: string;
   appliedAt: string | null;
+  rankingBefore: number | null;
+  rankingAfter: number | null;
 }
 
 interface Job {
@@ -462,6 +464,27 @@ export default function AutopilotClient({ initialSites }: Props) {
                           <span className="text-muted-foreground truncate max-w-xs inline-block align-bottom">
                             {change.newValue}
                           </span>
+                          {change.rankingBefore != null && change.rankingAfter != null && (
+                            <span
+                              className={`ml-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                change.rankingBefore - change.rankingAfter > 0.5
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                                  : change.rankingAfter - change.rankingBefore > 0.5
+                                  ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                              }`}
+                              title="Average GSC position before → after (7+ days)"
+                            >
+                              {change.rankingBefore.toFixed(1)} → {change.rankingAfter.toFixed(1)}
+                              {change.rankingBefore - change.rankingAfter > 0.5 &&
+                                ` (↑${(change.rankingBefore - change.rankingAfter).toFixed(1)})`}
+                            </span>
+                          )}
+                          {change.rankingBefore != null && change.rankingAfter == null && change.status === "APPLIED" && (
+                            <span className="ml-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="Position at apply time; result will be measured in ~7 days">
+                              pos. {change.rankingBefore.toFixed(1)} · measuring…
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
