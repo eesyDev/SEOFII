@@ -1,3 +1,4 @@
+import { useLocale } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Zap } from "lucide-react";
 import { isUrlQuery, type GscRow } from "@/lib/gsc";
@@ -19,6 +20,7 @@ function potentialClicks(row: GscRow): number {
 }
 
 export function QuickWinsSection({ quickWins }: { quickWins: GscRow[] }) {
+  const en = useLocale() === "en";
   // Страховка для старых отчётов: URL из вкладки «Страницы» — не запросы
   const rows = quickWins
     .filter((r) => !isUrlQuery(r.query))
@@ -32,12 +34,13 @@ export function QuickWinsSection({ quickWins }: { quickWins: GscRow[] }) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <Zap className="h-4 w-4 text-amber-500" /> Быстрые победы
+          <Zap className="h-4 w-4 text-amber-500" /> {en ? "Quick Wins" : "Быстрые победы"}
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Запросы, по которым Google уже показывает вас на позициях 5–20. Небольшая доработка
-          страницы под них — самый короткий путь к трафику
-          {totalPotential > 0 && <> (~{totalPotential.toLocaleString("ru-RU")} кликов/мес при выходе в топ-3)</>}.
+          {en
+            ? "Queries where Google already shows you at positions 5–20. Small page improvements here are the shortest path to traffic"
+            : "Запросы, по которым Google уже показывает вас на позициях 5–20. Небольшая доработка страницы под них — самый короткий путь к трафику"}
+          {totalPotential > 0 && <> (~{totalPotential.toLocaleString(en ? "en-US" : "ru-RU")} {en ? "clicks/mo if you reach top-3" : "кликов/мес при выходе в топ-3"})</>}.
         </p>
       </CardHeader>
       <CardContent className="p-0">
@@ -45,11 +48,11 @@ export function QuickWinsSection({ quickWins }: { quickWins: GscRow[] }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Запрос</th>
-                <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">Позиция</th>
-                <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Показы</th>
-                <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Клики</th>
-                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Потенциал</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">{en ? "Query" : "Запрос"}</th>
+                <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">{en ? "Position" : "Позиция"}</th>
+                <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">{en ? "Impressions" : "Показы"}</th>
+                <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">{en ? "Clicks" : "Клики"}</th>
+                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">{en ? "Potential" : "Потенциал"}</th>
               </tr>
             </thead>
             <tbody>

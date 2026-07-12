@@ -131,6 +131,7 @@ model Report {
   updatedAt    DateTime     @updatedAt
   gscData      Json?
   locationCode Int          @default(2840)
+  language     String       @default("ru") // язык генерируемого контента отчёта
   competitors  Competitor[]
   keywords     Keyword[]
   monitor      PageMonitor?

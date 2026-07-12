@@ -1,17 +1,18 @@
 "use client";
 
+import { useLocale } from "next-intl";
 import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 
 const STEPS = [
-  { label: "Анализируем страницу", duration: 8 },
-  { label: "Собираем конкурентов из выдачи", duration: 12 },
-  { label: "Скрапим сайты конкурентов", duration: 15 },
-  { label: "Получаем данные по ключевым словам", duration: 10 },
-  { label: "Замеряем скорость страниц", duration: 20 },
-  { label: "Генерируем SEO-бриф через Claude", duration: 35 },
-  { label: "Анализируем структуру через Gemini", duration: 12 },
-  { label: "Формируем рекомендации", duration: 15 },
+  { label: "Анализируем страницу", labelEn: "Analyzing your page", duration: 8 },
+  { label: "Собираем конкурентов из выдачи", labelEn: "Collecting SERP competitors", duration: 12 },
+  { label: "Скрапим сайты конкурентов", labelEn: "Scraping competitor pages", duration: 15 },
+  { label: "Получаем данные по ключевым словам", labelEn: "Fetching keyword data", duration: 10 },
+  { label: "Замеряем скорость страниц", labelEn: "Measuring page speed", duration: 20 },
+  { label: "Генерируем SEO-бриф через Claude", labelEn: "Generating SEO brief with Claude", duration: 35 },
+  { label: "Анализируем структуру через Gemini", labelEn: "Analyzing structure with Gemini", duration: 12 },
+  { label: "Формируем рекомендации", labelEn: "Assembling recommendations", duration: 15 },
 ];
 
 const TOTAL = STEPS.reduce((s, st) => s + st.duration, 0);
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export function ReportProgress({ startedAt }: Props) {
+  const en = useLocale() === "en";
   const [elapsed, setElapsed] = useState(() =>
     Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
   );
@@ -42,13 +44,13 @@ export function ReportProgress({ startedAt }: Props) {
   const progress = Math.min((elapsed / TOTAL) * 100, 95);
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
-  const timeLabel = minutes > 0 ? `${minutes}м ${seconds}с` : `${seconds}с`;
+  const timeLabel = minutes > 0 ? (en ? `${minutes}m ${seconds}s` : `${minutes}м ${seconds}с`) : (en ? `${seconds}s` : `${seconds}с`);
 
   return (
     <div className="space-y-6 py-4">
       <div className="space-y-2">
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>Генерируем отчёт...</span>
+          <span>{en ? "Generating report…" : "Генерируем отчёт..."}</span>
           <span>{timeLabel}</span>
         </div>
         <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
@@ -77,14 +79,14 @@ export function ReportProgress({ startedAt }: Props) {
               ) : (
                 <div className="h-4 w-4 shrink-0 rounded-full border-2 border-muted-foreground/30" />
               )}
-              <span className={isActive ? "font-medium" : ""}>{step.label}</span>
+              <span className={isActive ? "font-medium" : ""}>{en ? (step as any).labelEn ?? step.label : step.label}</span>
             </div>
           );
         })}
       </div>
 
       <p className="text-xs text-muted-foreground text-center">
-        Страница обновится автоматически когда отчёт будет готов
+        {en ? "The page will refresh automatically when the report is ready" : "Страница обновится автоматически когда отчёт будет готов"}
       </p>
     </div>
   );

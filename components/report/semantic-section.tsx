@@ -1,3 +1,4 @@
+import { useLocale } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Brain, SplitSquareHorizontal } from "lucide-react";
 import type { SemanticAnalysis } from "@/lib/semantic";
@@ -39,31 +40,33 @@ export function SemanticRelevanceCard({
   relevance: NonNullable<SemanticAnalysis["relevance"]>;
   targetKeyword: string;
 }) {
+  const en = useLocale() === "en";
   const gap = relevance.top3Avg - relevance.pageScore;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <Brain className="h-4 w-4" /> Семантическая релевантность
+          <Brain className="h-4 w-4" /> {en ? "Semantic relevance" : "Семантическая релевантность"}
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Насколько содержание страницы соответствует запросу «{targetKeyword}» — по смыслу, а не по вхождениям слов.
+          {en ? <>How well the page content matches the query “{targetKeyword}” — by meaning, not keyword occurrences.</> : <>Насколько содержание страницы соответствует запросу «{targetKeyword}» — по смыслу, а не по вхождениям слов.</>}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <ScoreBar label="Ваша страница" score={relevance.pageScore} bold />
-        <ScoreBar label="Топ-3 конкурентов (среднее)" score={relevance.top3Avg} />
+        <ScoreBar label={en ? "Your page" : "Ваша страница"} score={relevance.pageScore} bold />
+        <ScoreBar label={en ? "Top-3 competitors (avg)" : "Топ-3 конкурентов (среднее)"} score={relevance.top3Avg} />
 
         {gap > 3 && (
           <p className="text-sm text-muted-foreground">
-            Разрыв {gap} п.п. — конкуренты раскрывают тему запроса полнее. Смотрите «Семантические
-            пробелы» во вкладке «Ключевые слова»: там перечислены темы, которых не хватает.
+            {en
+              ? <>Gap of {gap} pts — competitors cover the query topic more fully. See “Semantic gaps” in the Keywords tab for the missing themes.</>
+              : <>Разрыв {gap} п.п. — конкуренты раскрывают тему запроса полнее. Смотрите «Семантические пробелы» во вкладке «Ключевые слова»: там перечислены темы, которых не хватает.</>}
           </p>
         )}
         {gap <= 3 && relevance.pageScore >= 75 && (
           <p className="text-sm text-muted-foreground">
-            Страница семантически на уровне топа — фокус на техничку, доверие и ссылки.
+            {en ? "Semantically your page is on par with the top — focus on technical SEO, trust and links." : "Страница семантически на уровне топа — фокус на техничку, доверие и ссылки."}
           </p>
         )}
 
@@ -91,6 +94,7 @@ export function SemanticRelevanceCard({
 // ─────────────────────────────────────────
 
 export function SemanticClustersSection({ analysis }: { analysis: SemanticAnalysis }) {
+  const en = useLocale() === "en";
   const { queryClusters, semanticGaps } = analysis;
   if (queryClusters.length === 0 && semanticGaps.length === 0) return null;
 
@@ -100,11 +104,12 @@ export function SemanticClustersSection({ analysis }: { analysis: SemanticAnalys
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <Brain className="h-4 w-4" /> Спрос по темам (из Search Console)
+              <Brain className="h-4 w-4" /> {en ? "Demand by topic (from Search Console)" : "Спрос по темам (из Search Console)"}
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Запросы сгруппированы по смыслу. Много показов + низкая релевантность страницы = тема,
-              под которую нужен контент.
+              {en
+                ? "Queries grouped by meaning. High impressions + low page relevance = a topic that needs content."
+                : "Запросы сгруппированы по смыслу. Много показов + низкая релевантность страницы = тема, под которую нужен контент."}
             </p>
           </CardHeader>
           <CardContent className="p-0">
@@ -112,11 +117,11 @@ export function SemanticClustersSection({ analysis }: { analysis: SemanticAnalys
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/40">
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Тема</th>
-                    <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">Запросов</th>
-                    <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">Показы</th>
-                    <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">Ср. позиция</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Раскрыта на</th>
+                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">{en ? "Topic" : "Тема"}</th>
+                    <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">{en ? "Queries" : "Запросов"}</th>
+                    <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">{en ? "Impressions" : "Показы"}</th>
+                    <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">{en ? "Avg. position" : "Ср. позиция"}</th>
+                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">{en ? "Covered" : "Раскрыта на"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -148,10 +153,10 @@ export function SemanticClustersSection({ analysis }: { analysis: SemanticAnalys
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <SplitSquareHorizontal className="h-4 w-4" /> Семантические пробелы
+              <SplitSquareHorizontal className="h-4 w-4" /> {en ? "Semantic gaps" : "Семантические пробелы"}
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Темы разделов конкурентов, у которых на вашей странице нет смыслового аналога — даже другими словами.
+              {en ? "Competitor section topics with no semantic counterpart on your page — even in different words." : "Темы разделов конкурентов, у которых на вашей странице нет смыслового аналога — даже другими словами."}
             </p>
           </CardHeader>
           <CardContent className="space-y-2.5">
@@ -159,14 +164,14 @@ export function SemanticClustersSection({ analysis }: { analysis: SemanticAnalys
               <div key={i} className="rounded-lg border p-3 space-y-1.5 text-sm">
                 <p className="font-medium leading-snug">«{gap.theme}»</p>
                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  <span>Есть у:</span>
+                  <span>{en ? "Present at:" : "Есть у:"}</span>
                   {gap.competitors.map((d) => (
                     <span key={d} className="rounded-full bg-muted px-2 py-0.5 font-medium">{d}</span>
                   ))}
                 </div>
                 {gap.closestOwn && (
                   <p className="text-xs text-muted-foreground">
-                    Ваш ближайший раздел: «{gap.closestOwn}» — похож лишь на {gap.similarity}%
+                    {en ? <>Your closest section: “{gap.closestOwn}” — only {gap.similarity}% similar</> : <>Ваш ближайший раздел: «{gap.closestOwn}» — похож лишь на {gap.similarity}%</>}
                   </p>
                 )}
               </div>

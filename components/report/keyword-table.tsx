@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale } from "next-intl";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +50,7 @@ function Th({
 }
 
 export function KeywordTable({ keywords }: { keywords: EnrichedKeyword[] }) {
+  const en = useLocale() === "en";
   const [tagFilter, setTagFilter] = useState<TagFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("volume");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -88,7 +90,7 @@ export function KeywordTable({ keywords }: { keywords: EnrichedKeyword[] }) {
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Table2 className="h-4 w-4" /> Все ключевые слова
+            <Table2 className="h-4 w-4" /> {en ? "All keywords" : "Все ключевые слова"}
           </CardTitle>
           {/* Фильтры по тегу */}
           <div className="flex gap-1 flex-wrap">
@@ -102,7 +104,7 @@ export function KeywordTable({ keywords }: { keywords: EnrichedKeyword[] }) {
                     : "bg-muted text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {t === "all" ? "Все" : TAG_CONFIG[t]?.label ?? t}
+                {t === "all" ? (en ? "All" : "Все") : TAG_CONFIG[t]?.label ?? t}
                 <span className="ml-1 opacity-60">{counts[t]}</span>
               </button>
             ))}
@@ -114,20 +116,20 @@ export function KeywordTable({ keywords }: { keywords: EnrichedKeyword[] }) {
           <table className="w-full text-sm">
             <thead className="border-y bg-muted/30">
               <tr>
-                <Th label="Ключевое слово" col="keyword"     sortKey={sortKey} dir={sortDir} onClick={() => toggleSort("keyword")} />
+                <Th label={en ? "Keyword" : "Ключевое слово"} col="keyword"     sortKey={sortKey} dir={sortDir} onClick={() => toggleSort("keyword")} />
                 <Th label="Volume"         col="volume"      sortKey={sortKey} dir={sortDir} onClick={() => toggleSort("volume")} />
                 <Th label="CPC"            col="cpc"         sortKey={sortKey} dir={sortDir} onClick={() => toggleSort("cpc")} />
-                <Th label="Конк."          col="competition" sortKey={sortKey} dir={sortDir} onClick={() => toggleSort("competition")} />
-                <Th label="У конкурентов" col="occurrences" sortKey={sortKey} dir={sortDir} onClick={() => toggleSort("occurrences")} />
-                {hasGsc && <Th label="GSC поз." col="gscPosition" sortKey={sortKey} dir={sortDir} onClick={() => toggleSort("gscPosition")} />}
-                <th className="text-left text-xs font-medium text-muted-foreground px-3 py-2">Тег</th>
+                <Th label={en ? "Comp." : "Конк."}          col="competition" sortKey={sortKey} dir={sortDir} onClick={() => toggleSort("competition")} />
+                <Th label={en ? "In competitors" : "У конкурентов"} col="occurrences" sortKey={sortKey} dir={sortDir} onClick={() => toggleSort("occurrences")} />
+                {hasGsc && <Th label={en ? "GSC pos." : "GSC поз."} col="gscPosition" sortKey={sortKey} dir={sortDir} onClick={() => toggleSort("gscPosition")} />}
+                <th className="text-left text-xs font-medium text-muted-foreground px-3 py-2">{en ? "Tag" : "Тег"}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={hasGsc ? 7 : 6} className="px-3 py-8 text-center text-sm text-muted-foreground">
-                    Нет ключей по выбранному фильтру
+                    {en ? "No keywords for this filter" : "Нет ключей по выбранному фильтру"}
                   </td>
                 </tr>
               ) : (

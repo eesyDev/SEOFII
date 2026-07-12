@@ -103,7 +103,8 @@ export async function analyzePageWithGemini(
   url: string,
   competitorDomains: string[] = [],
   targetSnapshot?: PageSnapshot,
-  sitePaths: string[] = []
+  sitePaths: string[] = [],
+  lang: "ru" | "en" = "ru"
 ): Promise<PageStructureAnalysis> {
   if (USE_MOCK) return getMockPageAnalysis();
 
@@ -159,7 +160,7 @@ ${pageBlock}
 - priority: "high" | "medium" | "low"
 - rationale: 1–2 предложения ПОЧЕМУ это важно для SEO и/или конверсии
 
-Отвечай ТОЛЬКО JSON:
+${lang === "en" ? "CRITICAL: Write ALL human-readable text (existingBlocks, names, rationale, summary) in ENGLISH.\n" : ""}Отвечай ТОЛЬКО JSON:
 {
   "existingBlocks": ["..."],
   "recommendedBlocks": [

@@ -12,6 +12,15 @@ import { htmlToText } from "./factGuard";
 
 const USE_MOCK = !process.env.ANTHROPIC_API_KEY;
 
+export type ReportLang = "ru" | "en";
+
+// Все промпты написаны по-русски; для EN-отчётов явно требуем английский вывод
+function outputLanguage(lang: ReportLang): string {
+  return lang === "en"
+    ? "\nCRITICAL: Write ALL human-readable text in your JSON response in ENGLISH (titles, recommendations, findings, questions, answers — everything).\n"
+    : "";
+}
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
@@ -443,7 +452,8 @@ export async function generateSEOBrief(
   targetSnapshot?: PageSnapshot,
   compSnapshots: PageSnapshot[] = [],
   missingTerms: MissingTerm[] = [],
-  existingPaths: string[] = []
+  existingPaths: string[] = [],
+  lang: ReportLang = "ru"
 ): Promise<{ brief: SEOBrief; costUsd: number }> {
   if (USE_MOCK) return getMockBrief(targetUrl, competitors);
 
@@ -561,7 +571,7 @@ ${keywordList}
 ${buildMissingTermsBlock(missingTerms, competitors.length)}
 ${buildExcerptsBlock(competitors, compSnapshots)}
 ${gscBlock}${existingPathsBlock}
-Верни JSON строго по схеме ниже. Без markdown-обёртки.
+${outputLanguage(lang)}Верни JSON строго по схеме ниже. Без markdown-обёртки.
 
 {
   "targetKeyword": "главный поисковый запрос страницы",
@@ -662,7 +672,8 @@ Schema.org: ${s.hasSchema ? s.schemaTypes.join(", ") : "нет"}
 export async function generateComparisons(
   targetSnapshot: PageSnapshot,
   competitorSnapshots: PageSnapshot[],
-  competitors: SerpResult[]
+  competitors: SerpResult[],
+  lang: ReportLang = "ru"
 ): Promise<CompetitorComparison[]> {
   if (USE_MOCK) return getMockComparisons(competitorSnapshots.map((s, i) => competitors[i] ?? { position: i + 1, url: s.url, domain: "", title: "", snippet: "" }));
 
@@ -700,7 +711,7 @@ ${compBody ? `Начало текста конкурента: """${compBody}"""`
 - category: "content" | "structure" | "keywords" | "technical" | "eeat"
 - impact: "high" | "medium" | "low"
 
-Отвечай ТОЛЬКО JSON:
+${outputLanguage(lang)}Отвечай ТОЛЬКО JSON:
 {
   "competitorUrl": "${comp.url}",
   "competitorPosition": ${comp.position},
@@ -739,7 +750,8 @@ export async function generateQuickFixes(
   comparisons: CompetitorComparison[],
   analytics: AnalyticsResult,
   siteType: SiteType = "content",
-  existingBlockLabels: string[] = []
+  existingBlockLabels: string[] = [],
+  lang: ReportLang = "ru"
 ): Promise<QuickFix[]> {
   if (USE_MOCK) return getMockQuickFixes(targetUrl);
 
@@ -788,7 +800,7 @@ ${existingBlocksLine}
 - category: "meta" | "content" | "links" | "technical"
 - Сортируй по impact: сначала самые быстрые и важные
 
-Отвечай ТОЛЬКО JSON-массивом:
+${outputLanguage(lang)}Отвечай ТОЛЬКО JSON-массивом:
 [
   {
     "action": "Конкретное действие с примером",
@@ -958,6 +970,8 @@ export async function generateBlockMatrix(
   competitorSnapshots: PageSnapshot[],
   competitors: SerpResult[],
   siteType: SiteType = "content"
+,
+  lang: ReportLang = "ru"
 ): Promise<BlockRow[]> {
   if (USE_MOCK) return getMockBlockMatrix(competitorSnapshots.length);
 
@@ -1003,7 +1017,7 @@ ${allKnownBlocks.map((k) => `- ${k}: ${blockLabels[k]}`).join("\n")}
 Включай только блоки которые реально имеют значение (не включай банальное типа "логотип").
 Сортируй: сначала "must", потом "consider", потом "optional" (включая те что уже есть).
 
-Отвечай ТОЛЬКО JSON-массивом (${competitorSnapshots.length} конкурентов = ${competitorSnapshots.length} элементов в "competitors"):
+${outputLanguage(lang)}Отвечай ТОЛЬКО JSON-массивом (${competitorSnapshots.length} конкурентов = ${competitorSnapshots.length} элементов в "competitors"):
 [
   {
     "block": "Название блока на русском",
@@ -1061,7 +1075,8 @@ export async function generateReadyContent(
   targetUrl: string,
   brief: SEOBrief,
   siteType: SiteType = "content",
-  pageText?: string
+  pageText?: string,
+  lang: ReportLang = "ru"
 ): Promise<ReadyContent> {
   if (USE_MOCK) return getMockReadyContent(targetUrl, brief);
 
@@ -1099,7 +1114,7 @@ ${pageFacts}
 - faqItems: ровно 5 реальных вопросов. Ответ 50–80 слов, конкретный, факты — только со страницы или плейсхолдер
 - schemaMarkup: валидный JSON-LD для ${schemaType}, готовый для вставки в <script type="application/ld+json">
 
-Отвечай ТОЛЬКО JSON:
+${outputLanguage(lang)}Отвечай ТОЛЬКО JSON:
 {
   "title": "...",
   "h1": "...",
@@ -1173,7 +1188,8 @@ export async function generateSchemaMarkup(
   brief: SEOBrief,
   siteType: SiteType,
   detectedBlocks: string[] = [],
-  existingSchemas: string[] = []
+  existingSchemas: string[] = [],
+  lang: ReportLang = "ru"
 ): Promise<SchemaResult> {
   if (USE_MOCK) return getMockSchemaResult(url, siteType);
 
@@ -1202,7 +1218,7 @@ ${existingInfo}
 Задача: подобрать 2–3 типа schema.org которые дадут наибольший SEO-эффект для этого сайта.
 Заполни реальными данными на основе URL и типа бизнеса. Если данных нет — используй плейсхолдеры [ЗАПОЛНИТЬ: описание].
 
-Отвечай ТОЛЬКО JSON:
+${outputLanguage(lang)}Отвечай ТОЛЬКО JSON:
 {
   "schemas": [
     {

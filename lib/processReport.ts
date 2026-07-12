@@ -76,6 +76,7 @@ export async function processReport(reportId: string) {
   // URL-строки из вкладки «Страницы» GSC — не запросы; фильтруем у источника,
   // иначе они утекают в бриф, семантику и кластеры
   let gscRows = ((report.gscData as GscRow[] | null) ?? []).filter((r) => !isUrlQuery(r.query));
+  const lang = (report.language === "en" ? "en" : "ru") as "ru" | "en";
 
   await prisma.report.update({
     where: { id: reportId },
@@ -245,10 +246,10 @@ export async function processReport(reportId: string) {
       { brief, costUsd: briefCost },
       [comparisons, blockMatrix],
     ] = await Promise.all([
-      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType, targetSnapshot, compSnapshots, missingTerms, sitePaths),
+      generateSEOBrief(report.url, competitors, keywordData, domainInfo, analytics, gscRows, siteType, targetSnapshot, compSnapshots, missingTerms, sitePaths, lang),
       Promise.all([
-        generateComparisons(targetSnapshot, compSnapshots, topCompetitors),
-        generateBlockMatrix(targetSnapshot, compSnapshots, topCompetitors, siteType),
+        generateComparisons(targetSnapshot, compSnapshots, topCompetitors, lang),
+        generateBlockMatrix(targetSnapshot, compSnapshots, topCompetitors, siteType, lang),
       ]),
     ]);
 
@@ -270,9 +271,9 @@ export async function processReport(reportId: string) {
     const existingBlockLabels = targetSnapshot.detectedBlocks.map((b) => BLOCK_LABELS_RU[b] ?? b);
 
     const [quickFixesRaw, pageStructureRaw, readyContentRaw, semanticAnalysis] = await Promise.all([
-      generateQuickFixes(report.url, brief, comparisons, analytics, siteType, existingBlockLabels),
-      analyzePageWithGemini(report.url, competitorDomains, targetSnapshot, sitePaths),
-      isPro ? generateReadyContent(report.url, brief, siteType, targetPageText) : Promise.resolve(null),
+      generateQuickFixes(report.url, brief, comparisons, analytics, siteType, existingBlockLabels, lang),
+      analyzePageWithGemini(report.url, competitorDomains, targetSnapshot, sitePaths, lang),
+      isPro ? generateReadyContent(report.url, brief, siteType, targetPageText, lang) : Promise.resolve(null),
       computeSemanticAnalysis({
         targetKeyword: brief.targetKeyword ?? serpQuery,
         targetPageText,

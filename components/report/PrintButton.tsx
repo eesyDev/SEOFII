@@ -1,9 +1,11 @@
 "use client";
 
+import { useLocale } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 
 export function PrintButton() {
+  const en = useLocale() === "en";
   return (
     <Button
       variant="outline"
@@ -12,7 +14,7 @@ export function PrintButton() {
       onClick={() => window.print()}
     >
       <Download className="h-3.5 w-3.5" />
-      Скачать PDF
+      {en ? "Download PDF" : "Скачать PDF"}
     </Button>
   );
 }

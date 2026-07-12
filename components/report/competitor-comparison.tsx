@@ -1,9 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronDown, ChevronUp, ListChecks, Swords } from "lucide-react";
 import type { CompetitorComparison, ComparisonReason } from "@/lib/claude";
+
+const IMPACT_LABEL_EN: Record<string, string> = { high: "High", medium: "Medium", low: "Low" };
+const CATEGORY_LABEL_EN: Record<string, string> = {
+  content: "Content", structure: "Structure", keywords: "Keywords", technical: "Technical", eeat: "Trust",
+};
 
 const IMPACT_CONFIG = {
   high:   { label: "Высокий",  className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
@@ -19,7 +25,7 @@ const CATEGORY_LABEL: Record<ComparisonReason["category"], string> = {
   eeat:      "Доверие",
 };
 
-function ComparisonCard({ comparison }: { comparison: CompetitorComparison }) {
+function ComparisonCard({ comparison, en }: { comparison: CompetitorComparison; en: boolean }) {
   const [open, setOpen] = useState(true);
   const domain = (() => { try { return new URL(comparison.competitorUrl).hostname; } catch { return comparison.competitorUrl; } })();
 
@@ -50,17 +56,17 @@ function ComparisonCard({ comparison }: { comparison: CompetitorComparison }) {
               <div key={i} className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-medium text-muted-foreground bg-muted rounded px-1.5 py-0.5">
-                    {CATEGORY_LABEL[reason.category]}
+                    {en ? CATEGORY_LABEL_EN[reason.category] ?? reason.category : CATEGORY_LABEL[reason.category]}
                   </span>
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${impact.className}`}>
-                    {impact.label}
+                    {en ? IMPACT_LABEL_EN[reason.impact] ?? reason.impact : impact.label}
                   </span>
                 </div>
                 <p className="text-sm font-medium leading-snug">{reason.finding}</p>
                 {reason.coveredByQuickFix ? (
                   <p className="text-xs text-muted-foreground leading-snug inline-flex items-center gap-1">
                     <ListChecks className="h-3.5 w-3.5 shrink-0" />
-                    Действие уже в списке задач выше
+                    {en ? "Action already in the task list above" : "Действие уже в списке задач выше"}
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground leading-snug">→ {reason.recommendation}</p>
@@ -80,23 +86,24 @@ interface Props {
 }
 
 export function CompetitorComparisonSection({ comparisons, isPro }: Props) {
+  const en = useLocale() === "en";
   if (comparisons.length === 0) return null;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <Swords className="h-4 w-4" /> Почему конкурент выше тебя
+          <Swords className="h-4 w-4" /> {en ? "Why competitors outrank you" : "Почему конкурент выше тебя"}
         </CardTitle>
         {!isPro && (
           <p className="text-xs text-muted-foreground mt-0.5">
-            Показан анализ 1 конкурента. Pro — до 3 конкурентов.
+            {en ? "Showing 1 competitor. Pro unlocks up to 3." : "Показан анализ 1 конкурента. Pro — до 3 конкурентов."}
           </p>
         )}
       </CardHeader>
       <CardContent className="space-y-3">
         {comparisons.map((c, i) => (
-          <ComparisonCard key={i} comparison={c} />
+          <ComparisonCard key={i} comparison={c} en={en} />
         ))}
       </CardContent>
     </Card>

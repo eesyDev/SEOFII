@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
   const projectId: string | undefined = body?.projectId;
   const gscData = body?.gscData ?? null;
   const locationCode: number = body?.locationCode ?? 2840;
+  const language: string = body?.language === "en" ? "en" : "ru";
 
   if (!url) return NextResponse.json({ error: "URL обязателен" }, { status: 400 });
 
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
       status: "PENDING",
       gscData,
       locationCode,
+      language,
     },
   });
 
