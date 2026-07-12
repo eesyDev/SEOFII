@@ -78,6 +78,13 @@
   outline-color: color-mix(in oklch, var(--color-ring) 50%, transparent);
 }
 
+/* Дефолтная фокус-обводка браузера слишком толстая и яркая — делаем тонкую и приглушённую */
+:focus-visible {
+  outline-width: 1px;
+  outline-style: solid;
+  outline-offset: 2px;
+}
+
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);

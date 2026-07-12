@@ -101,7 +101,7 @@ export default async function HomePage() {
               <Zap className="h-4 w-4 text-[#fd356e]" />
             </div>
             <span className="text-lg font-semibold tracking-tight">SEOBrief</span>
-            <span className="ml-1 rounded-full border border-[#fd356e]/30 bg-[#fd356e]/10 px-2 py-0.5 text-[10px] font-medium text-[#fd356e]">
+            <span className="ml-1 rounded-full border border-[#fd356e]/15 bg-[#fd356e]/[0.07] px-2 py-0.5 text-[10px] font-medium text-[#fd356e]">
               Beta
             </span>
           </div>
@@ -131,7 +131,7 @@ export default async function HomePage() {
         <div className="container mx-auto max-w-6xl w-full py-20">
           <div className="grid grid-cols-1 items-center gap-16 lg:grid-cols-2">
             <div className="animate-fade-up">
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#fd356e]/20 bg-[#fd356e]/5 px-4 py-1.5 text-sm text-[#fd356e]/80">
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#fd356e]/10 bg-[#fd356e]/[0.04] px-4 py-1.5 text-sm text-[#fd356e]/80">
                 <Sparkles className="h-3.5 w-3.5 text-[#fd356e]" />
                 {t("hero.badge")}
               </div>
@@ -206,7 +206,7 @@ export default async function HomePage() {
             {features.map((f) => (
               <div
                 key={f.title}
-                className="group relative rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 hover:border-[#fd356e]/30 hover:bg-white/[0.04] transition-all"
+                className="group relative rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 hover:border-[#fd356e]/15 hover:bg-white/[0.04] transition-all"
               >
                 <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-br from-[#fd356e]/5 to-transparent" />
                 <div className="relative">
@@ -241,7 +241,7 @@ export default async function HomePage() {
             {featureItems.map((item) => (
               <div
                 key={item.title}
-                className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 hover:border-[#fd356e]/20 transition-colors"
+                className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 hover:border-[#fd356e]/10 transition-colors"
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#fd356e]/10 mb-4">
                   <item.icon className="h-4.5 w-4.5 text-[#fd356e]" />
@@ -274,7 +274,7 @@ export default async function HomePage() {
                 key={plan.name}
                 className={`relative flex flex-col rounded-2xl p-6 transition-all ${
                   plan.highlight
-                    ? "border border-[#fd356e]/50 bg-gradient-to-b from-[#fd356e]/10 to-transparent shadow-xl shadow-[#fd356e]/10"
+                    ? "border border-[#fd356e]/25 bg-gradient-to-b from-[#fd356e]/[0.06] to-transparent shadow-lg shadow-[#fd356e]/5"
                     : "border border-white/[0.06] bg-white/[0.02]"
                 }`}
               >

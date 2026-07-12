@@ -15,9 +15,12 @@ export function PageStructureSection({ pageStructure }: { pageStructure: PageStr
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <Layers className="h-4 w-4" /> Структура страницы
+          <Layers className="h-4 w-4" /> Взгляд AI на вашу страницу
         </CardTitle>
-        {summary && <p className="text-xs text-muted-foreground mt-0.5">{summary}</p>}
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Разбор именно этой страницы: что уже есть и чего не хватает.
+          {summary ? ` ${summary}` : ""}
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Что есть */}

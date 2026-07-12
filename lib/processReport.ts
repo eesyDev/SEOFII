@@ -16,6 +16,7 @@ import { htmlToText, sanitizeFacts } from "@/lib/factGuard";
 import { markCoveredRecommendations, filterCoveredTexts } from "@/lib/dedupe";
 import { buildCompetitorEvidence } from "@/lib/competitorEvidence";
 import { fetchSitePaths, findSimilarExistingPath } from "@/lib/siteInventory";
+import { isAggregator } from "@/lib/aggregators";
 import { computeSemanticAnalysis } from "@/lib/semantic";
 import { scrapePages, BLOCK_LABELS_RU } from "@/lib/scraper";
 import { fetchPageSpeeds } from "@/lib/pagespeed";
@@ -162,9 +163,14 @@ export async function processReport(reportId: string) {
     console.log(`[processReport] competitors: ${fromCache ? "from cache" : "from DataForSEO"} (${competitors.length})`);
 
     const compareCount = isPro ? 3 : 1;
-    // Скрейпим с запасом: часть сайтов недоступна (анти-бот) — берём первых N доступных,
-    // иначе FREE-юзер с неприступным конкурентом на №1 получает пустой анализ
-    const scrapePool = competitors.slice(0, compareCount + 2);
+    // Скрейпим с запасом: агрегаторы (profi.ru, avito) исключаем из сравнения —
+    // локальному бизнесу с ними тягаться бессмысленно; часть сайтов недоступна (анти-бот).
+    // Берём первых N доступных не-агрегаторов, fallback — что есть.
+    const scrapePool = competitors
+      .filter((c) => !isAggregator(c.domain, c.title))
+      .slice(0, compareCount + 2);
+    // Если вся выдача — агрегаторы, работаем с ними, иначе отчёт пустой
+    if (scrapePool.length === 0) scrapePool.push(...competitors.slice(0, compareCount + 2));
     const competitorDomains = [...new Set(competitors.map((c) => c.domain))];
 
     const fromTitles = competitors
@@ -352,6 +358,18 @@ export async function processReport(reportId: string) {
       existingBlocks, siteType, brief.targetKeyword,
       targetSnapshot.detectedBlocks, pageType, detectedNiche
     );
+
+    // «Взгляд AI на страницу» не должен повторять матрицу блоков и паттерны ниши
+    if (pageStructure?.recommendedBlocks?.length) {
+      const canonicalBlocks = [
+        ...blockMatrix.map((b) => `${b.block} ${b.tip}`),
+        ...nichePatterns.filter((p) => !p.present).map((p) => `${p.label} ${p.rationale ?? ""}`),
+      ];
+      const kept = new Set(
+        filterCoveredTexts(pageStructure.recommendedBlocks.map((r) => r.name), canonicalBlocks)
+      );
+      pageStructure.recommendedBlocks = pageStructure.recommendedBlocks.filter((r) => kept.has(r.name));
+    }
 
     const compCost = comparisons.length * 0.015;
     const costUsd = briefCost + compCost + 0.01;

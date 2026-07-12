@@ -28,8 +28,25 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// Объединяет все блоки в один JSON-LD с общим @graph — вставляется одним скриптом
+function buildCombinedSchema(schemas: SchemaResult["schemas"]): string | null {
+  try {
+    const nodes: unknown[] = [];
+    for (const s of schemas) {
+      const parsed = JSON.parse(s.code);
+      if (Array.isArray(parsed["@graph"])) nodes.push(...parsed["@graph"]);
+      else nodes.push(parsed);
+    }
+    return JSON.stringify({ "@context": "https://schema.org", "@graph": nodes }, null, 2);
+  } catch {
+    return null;
+  }
+}
+
 export function SchemaSection({ schemaResult }: { schemaResult: SchemaResult }) {
   if (!schemaResult?.schemas?.length) return null;
+
+  const combined = buildCombinedSchema(schemaResult.schemas);
 
   return (
     <Card>
@@ -42,6 +59,28 @@ export function SchemaSection({ schemaResult }: { schemaResult: SchemaResult }) 
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
+        {combined && (
+          <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Badge className="font-mono text-xs">Всё одним блоком</Badge>
+                <p className="text-xs text-muted-foreground">
+                  Вся разметка в одном скрипте — достаточно вставить только его
+                </p>
+              </div>
+              <CopyButton text={`<script type="application/ld+json">\n${combined}\n</script>`} />
+            </div>
+            <details>
+              <summary className="text-xs text-muted-foreground cursor-pointer select-none">Показать код</summary>
+              <pre className="mt-2 text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap break-all leading-relaxed max-h-48 overflow-y-auto bg-background rounded p-2 border">
+                {`<script type="application/ld+json">\n${combined}\n</script>`}
+              </pre>
+            </details>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Или по частям — если нужна только конкретная разметка:
+        </p>
         {schemaResult.schemas.map((schema, i) => (
           <div key={i} className="rounded-lg border bg-muted/30 p-3 space-y-2">
             <div className="flex items-center justify-between gap-2">

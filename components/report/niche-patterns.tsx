@@ -46,10 +46,11 @@ export function NichePatternsSection({ patterns }: { patterns: PatternInsight[] 
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <BarChart2 className="h-4 w-4" /> Паттерны ниши
+          <BarChart2 className="h-4 w-4" /> Статистика ниши
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Что есть у конкурентов в топе — и чего не хватает у вас
+          Не про вашу страницу, а про нишу в целом: какие блоки и как часто встречаются у страниц
+          в топе — накоплено по многим выдачам. Процент = доля топовых страниц с этим блоком.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">

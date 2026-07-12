@@ -193,7 +193,7 @@ export default function HeroVisual() {
               {KEYWORDS.map((kw, i) => (
                 <span
                   key={kw}
-                  className="rounded-full border border-[#fd356e]/20 bg-[#fd356e]/10 px-2 py-0.5 text-[10px] text-[#fd356e]"
+                  className="rounded-full border border-[#fd356e]/10 bg-[#fd356e]/10 px-2 py-0.5 text-[10px] text-[#fd356e]"
                   style={{
                     opacity: kwVisible[i] ? 1 : 0,
                     transform: kwVisible[i] ? "translateY(0)" : "translateY(4px)",
@@ -238,7 +238,7 @@ export default function HeroVisual() {
       </div>
 
       <div
-        className="absolute -bottom-2 -left-6 rounded-xl border border-[#fd356e]/20 bg-[#0d1117] px-3 py-1.5 shadow-lg"
+        className="absolute -bottom-2 -left-6 rounded-xl border border-[#fd356e]/10 bg-[#0d1117] px-3 py-1.5 shadow-lg"
         style={{
           animation: "float-badge 3s ease-in-out infinite 1.5s",
           boxShadow: "0 0 20px rgba(253,53,110,0.1)",
