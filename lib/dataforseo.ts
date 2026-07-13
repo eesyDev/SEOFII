@@ -34,6 +34,69 @@ export interface KeywordData {
   competition: number;
 }
 
+// Реальный ранжирующийся запрос домена из индекса Google (DataForSEO Labs).
+// Форма совместима с GscRow — питает тот же анализ, когда GSC/CSV нет,
+// и работает даже для сайтов за Cloudflare (страницу скрейпить не нужно).
+export interface RankedKeyword {
+  query: string;
+  position: number;
+  impressions: number; // здесь — месячный объём поиска (проксирует спрос)
+  clicks: number;
+  ctr: number;
+  volume: number;
+  cpc: number;
+  url: string; // страница, которая ранжируется по этому запросу
+}
+
+// Запросы, по которым домен уже ранжируется в Google (топ-100).
+// Требует подписки DataForSEO Labs; при отказе возвращает [].
+export async function fetchRankedKeywords(
+  domain: string,
+  locationCode = 2840,
+  limit = 700
+): Promise<RankedKeyword[]> {
+  if (USE_MOCK) return [];
+  const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
+
+  try {
+    const res = await fetch(`${BASE_URL}/dataforseo_labs/google/ranked_keywords/live`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify([
+        { target: cleanDomain, location_code: locationCode, language_code: "en", limit },
+      ]),
+    });
+    const data = await res.json();
+    const task = data.tasks?.[0];
+    if (task?.status_code !== 20000) {
+      console.warn(`[dataforseo] ranked_keywords unavailable: ${task?.status_message}`);
+      return [];
+    }
+    const items = task.result?.[0]?.items ?? [];
+    return items
+      .map((it: Record<string, any>): RankedKeyword | null => {
+        const kw = it.keyword_data?.keyword;
+        const pos = it.ranked_serp_element?.serp_item?.rank_absolute;
+        if (!kw || typeof pos !== "number") return null;
+        const volume = it.keyword_data?.keyword_info?.search_volume ?? 0;
+        return {
+          query: kw,
+          position: pos,
+          impressions: volume,
+          clicks: 0,
+          ctr: 0,
+          volume,
+          cpc: it.keyword_data?.keyword_info?.cpc ?? 0,
+          url: it.ranked_serp_element?.serp_item?.url ?? "",
+        };
+      })
+      .filter((r: RankedKeyword | null): r is RankedKeyword => r !== null);
+  } catch (err) {
+    console.warn("[dataforseo] ranked_keywords error:", err);
+    return [];
+  }
+}
+
 export interface DomainInfo {
   domain: string;
   domainAge: string | null;       // "3 года 4 месяца" или null

@@ -16,7 +16,11 @@ export default auth((req) => {
   const isProtected = PROTECTED.some((p) => pathnameNoLocale.startsWith(p));
   const locale = pathname.match(/^\/(ru|en)/)?.[1] ?? "ru";
 
-  if (isProtected && !req.auth) {
+  // Публичные share-ссылки на отчёт: токен валидирует сама страница
+  const isSharedReport =
+    /^\/reports\/[^/]+$/.test(pathnameNoLocale) && req.nextUrl.searchParams.has("share");
+
+  if (isProtected && !req.auth && !isSharedReport) {
     return NextResponse.redirect(new URL(`/${locale}/login`, req.url));
   }
 

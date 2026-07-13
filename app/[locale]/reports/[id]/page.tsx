@@ -34,6 +34,7 @@ import { BlockMatrixSection } from "@/components/report/block-matrix";
 import { SpeedCard } from "@/components/report/speed-card";
 import { ReadyContentSection, ReadyContentLocked } from "@/components/report/ready-content";
 import { PrintButton } from "@/components/report/PrintButton";
+import { ShareButton } from "@/components/report/ShareButton";
 import { ReportProgress } from "@/components/report/report-progress";
 import { SchemaSection } from "@/components/report/schema-section";
 import { PageStructureSection } from "@/components/report/page-structure";
@@ -77,26 +78,31 @@ const STATUS_CONFIG = (en: boolean) => ({
 // СТРАНИЦА
 // ─────────────────────────────────────────
 
-export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ReportPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ share?: string }>;
+}) {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-
-  const userId = session.user.id;
   const { id } = await params;
+  const { share } = await searchParams;
   const en = (await getLocale()) === "en";
+
+  const userId = session?.user?.id ?? null;
 
   const [report, user, monitoring] = await Promise.all([
     prisma.report.findUnique({
-      where: { id, userId },
+      where: { id },
       include: {
         competitors: { orderBy: { position: "asc" } },
         project:     { select: { name: true } },
       },
     }),
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: { plan: true, isAdmin: true },
-    }),
+    userId
+      ? prisma.user.findUnique({ where: { id: userId }, select: { plan: true, isAdmin: true } })
+      : Promise.resolve(null),
     prisma.pageMonitor.findFirst({
       where: { reportId: id },
       include: {
@@ -107,6 +113,10 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   ]);
 
   if (!report) notFound();
+
+  const isOwner = userId === report.userId;
+  const isSharedView = !isOwner && !!share && !!report.shareToken && share === report.shareToken;
+  if (!isOwner && !isSharedView) redirect("/login");
 
   const config = STATUS_CONFIG(en)[report.status];
   const StatusIcon = config.icon;
@@ -131,18 +141,20 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const missingTerms = result?.missingTerms as MissingTerm[] | null ?? null;
   const gscRows     = (report.gscData as GscRow[] | null) ?? [];
   const hasGsc      = gscRows.length > 0;
-  const isFree      = !user?.isAdmin && (!user || user.plan === "FREE");
+  const isFree      = isSharedView ? false : !user?.isAdmin && (!user || user.plan === "FREE");
   const domainInfo  = result?.domainInfo ?? {};
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
-      <ReportPoller reportId={id} initialStatus={report.status} />
+      {isOwner && <ReportPoller reportId={id} initialStatus={report.status} />}
 
       {/* Хедер */}
       <div className="flex items-start gap-3">
-        <Button variant="ghost" size="icon" asChild className="no-print -ml-2 shrink-0">
-          <Link href="/reports"><ArrowLeft className="h-4 w-4" /></Link>
-        </Button>
+        {isOwner && (
+          <Button variant="ghost" size="icon" asChild className="no-print -ml-2 shrink-0">
+            <Link href="/reports"><ArrowLeft className="h-4 w-4" /></Link>
+          </Button>
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-lg font-bold truncate">{report.url}</h1>
@@ -161,7 +173,12 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
               </p>
               {siteType && <SiteTypeBadge siteType={siteType} en={en} />}
             </div>
-            {report.status === "DONE" && result && <PrintButton />}
+            {report.status === "DONE" && result && (
+              <div className="flex items-center gap-2">
+                {isOwner && <ShareButton reportId={id} />}
+                <PrintButton />
+              </div>
+            )}
           </div>
         </div>
       </div>

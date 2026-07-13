@@ -111,7 +111,8 @@ export async function getPatternInsights(
   targetKeyword?: string,
   detectedBlocks: string[] = [],
   pageType: PageType = "home",
-  detectedNiche?: string
+  detectedNiche?: string,
+  lang: "ru" | "en" = "ru"
 ): Promise<PatternInsight[]> {
   // Приоритетные типы паттернов для каждого типа сайта
   const priorityTypes =
@@ -122,6 +123,11 @@ export async function getPatternInsights(
       : ["content", "trust", "conversion", "technical", "navigation"];
 
   const niche = detectedNiche && detectedNiche !== "general" ? detectedNiche : undefined;
+
+  // Без уверенной ниши НЕ показываем паттерны: иначе выдаём накопленное из чужих
+  // ниш (напр. русский ремонт на англ. магазине). База пополняется по нишам —
+  // когда наберётся своя, секция появится сама.
+  if (!niche) return [];
 
   // Запрашиваем по niche + pageType, с fallback на home если нет данных для типа
   const buildWhere = (pt: string) => ({
@@ -148,6 +154,14 @@ export async function getPatternInsights(
       take: 50,
     });
   }
+
+  // Языковой замок: паттерны копятся с текстами на языке проанализированных
+  // сайтов. На англ. отчёте прячем кириллические паттерны, на русском — латиницу.
+  const hasCyrillic = (s: string) => /[а-яё]/i.test(s);
+  dbPatterns = dbPatterns.filter((p) => {
+    const text = `${p.context ?? ""} ${p.pattern}`;
+    return lang === "en" ? !hasCyrillic(text) : hasCyrillic(text) || !/[a-z]{4,}/i.test(text);
+  });
 
   if (dbPatterns.length === 0) return [];
 

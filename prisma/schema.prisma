@@ -132,6 +132,7 @@ model Report {
   gscData      Json?
   locationCode Int          @default(2840)
   language     String       @default("ru") // язык генерируемого контента отчёта
+  shareToken   String?      @unique // публичная ссылка на отчёт (read-only, без логина)
   competitors  Competitor[]
   keywords     Keyword[]
   monitor      PageMonitor?

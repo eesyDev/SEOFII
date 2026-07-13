@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { fetchCompetitors, fetchKeywords, fetchDomainInfo } from "@/lib/dataforseo";
+import { fetchCompetitors, fetchKeywords, fetchDomainInfo, fetchRankedKeywords } from "@/lib/dataforseo";
 import { generateSEOBrief, generateComparisons, generateBlockMatrix, generateQuickFixes, generateReadyContent } from "@/lib/claude";
 import type { SchemaResult } from "@/lib/claude";
 import { generateSchemaWithGemini, analyzePageWithGemini } from "@/lib/gemini";
@@ -69,6 +69,24 @@ function blockAlreadyDetected(recommendedName: string, detectedBlocks: string[])
   return detectedBlocks.some((block) => BLOCK_KEYWORDS[block]?.test(recommendedName));
 }
 
+// Брендовый запрос («jm attachments», «jma reviews») — не годится как SERP-запрос
+function isBrandedQuery(query: string, brand: string): boolean {
+  const q = query.toLowerCase().replace(/[^a-zа-яё0-9]/gi, "");
+  const b = brand.toLowerCase().replace(/[^a-zа-яё0-9]/gi, "");
+  if (b.length < 3) return false;
+  // Инициалы бренда (jma ← jm attachments) тоже считаем брендовыми
+  return q.includes(b) || q.includes(b.slice(0, 3));
+}
+
+// Убирает бренд-суффикс из title: "Pest Control Services | Bulwark" → "Pest Control Services"
+function cleanTitleForQuery(title?: string): string {
+  if (!title) return "";
+  const parts = title.split(/\s*[|—–\-·»]\s*/).map((p) => p.trim()).filter(Boolean);
+  // Берём самую длинную часть — обычно это описание услуги, а не название бренда
+  const best = parts.sort((a, b) => b.length - a.length)[0] ?? title;
+  return best.length > 3 ? best : title.trim();
+}
+
 export async function processReport(reportId: string) {
   const report = await prisma.report.findUnique({ where: { id: reportId } });
   if (!report) throw new Error(`Report ${reportId} not found`);
@@ -106,11 +124,55 @@ export async function processReport(reportId: string) {
     });
     const isPro = user?.isAdmin || user?.plan === "STARTER" || user?.plan === "PRO";
 
-    // Сначала скрапим целевую страницу чтобы взять title/H1 для поискового запроса
-    const { target: targetSnapshotPre } = await scrapePages(report.url, []);
-    const serpQuery = [targetSnapshotPre.h1, targetSnapshotPre.title]
-      .map((s) => s?.trim())
-      .find((s) => s && s.length > 3) ?? new URL(report.url).hostname;
+    // Скрапим целевую страницу + тянем ранжирующиеся запросы домена из индекса Google.
+    // ranked_keywords работает даже когда страница за Cloudflare (скрейп падает).
+    const domainForKeywords = new URL(report.url).hostname;
+    const [{ target: targetSnapshotPre }, rankedKeywords] = await Promise.all([
+      scrapePages(report.url, []),
+      gscRows.length === 0
+        ? fetchRankedKeywords(domainForKeywords, report.locationCode).catch(() => [])
+        : Promise.resolve([]),
+    ]);
+
+    // Нет GSC — используем ранжирующиеся запросы как источник данных о позициях
+    if (gscRows.length === 0 && rankedKeywords.length > 0) {
+      gscRows = rankedKeywords.map((r) => ({
+        query: r.query,
+        position: r.position,
+        impressions: r.impressions,
+        clicks: r.clicks,
+        ctr: r.ctr,
+      }));
+      console.log(`[processReport] using ${gscRows.length} ranked keywords as position data`);
+      // Сохраняем — так засветятся все секции отчёта на основе позиций
+      await prisma.report.update({
+        where: { id: reportId },
+        data: { gscData: gscRows as unknown as Prisma.InputJsonValue },
+      });
+    }
+
+    // Поисковый запрос для выдачи: сначала топ-коммерческий ранжирующийся запрос
+    // (не брендовый), затем title страницы, и только потом H1 (часто это слоган).
+    const brandTokens = domainForKeywords.replace(/^www\./, "").split(".")[0];
+    // Информационные запросы («what is…») дают инфо-выдачу, а не конкурентов.
+    // Ещё важнее: запрос должен вести на ТОВАРНУЮ страницу — тогда конкуренты
+    // будут по профилю бизнеса, а не по касательному запросу (напр. «financing»).
+    const informationalIntent = /^(what|how|why|when|where|who|can|is|are|does)\b|^(что|как|почему|зачем)\b/i;
+    const productUrl = /\/(product|products|all-products|shop|store|category|collections?|catalog|p|item)s?\//i;
+    const commercialRanked = rankedKeywords
+      .filter((r) => r.position <= 20 && r.volume >= 20 && !isBrandedQuery(r.query, brandTokens))
+      .filter((r) => !informationalIntent.test(r.query));
+    const topRanked =
+      // 1) коммерческий запрос на товарной странице (ядро бизнеса)
+      commercialRanked.filter((r) => productUrl.test(r.url)).sort((a, b) => b.volume - a.volume)[0]?.query ??
+      // 2) любой коммерческий запрос по объёму
+      commercialRanked.sort((a, b) => b.volume - a.volume)[0]?.query;
+    const serpQuery =
+      topRanked ??
+      [targetSnapshotPre.title, targetSnapshotPre.h1]
+        .map((s) => cleanTitleForQuery(s))
+        .find((s) => s && s.length > 3) ??
+      domainForKeywords;
 
     // Кеш DataForSEO SERP: берём конкурентов из последнего отчёта (≤7 дней) для того же URL
     const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -357,7 +419,7 @@ export async function processReport(reportId: string) {
 
     const nichePatterns = await getPatternInsights(
       existingBlocks, siteType, brief.targetKeyword,
-      targetSnapshot.detectedBlocks, pageType, detectedNiche
+      targetSnapshot.detectedBlocks, pageType, detectedNiche, lang
     );
 
     // «Взгляд AI на страницу» не должен повторять матрицу блоков и паттерны ниши

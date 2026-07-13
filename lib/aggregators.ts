@@ -2,7 +2,38 @@
 // бессмысленно — они ранжируются авторитетом домена, а не качеством страницы.
 // Исключаем их из сравнения/улик, но оставляем в таблице выдачи.
 
+// Информационные, UGC- и медиа-сайты: никогда не коммерческие конкуренты
+// локального бизнеса или магазина, но часто лезут в выдачу по инфо-запросам.
+const INFORMATIONAL_DOMAINS = [
+  "reddit.com",
+  "quora.com",
+  "wikipedia.org",
+  "youtube.com",
+  "pinterest.com",
+  "medium.com",
+  "facebook.com",
+  "instagram.com",
+  "linkedin.com",
+  "tiktok.com",
+  "healthline.com",
+  "webmd.com",
+  "forbes.com",
+  "nytimes.com",
+  "wikihow.com",
+  "yelp.com",
+  "tripadvisor.com",
+  "amazon.com",
+  "ebay.com",
+  "etsy.com",
+  "homedepot.com",
+  "lowes.com",
+  "angi.com",
+  "thumbtack.com",
+  "yellowpages.com",
+];
+
 const AGGREGATOR_DOMAINS = [
+  ...INFORMATIONAL_DOMAINS,
   "profi.ru",
   "avito.ru",
   "youdo.com",
