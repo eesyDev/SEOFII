@@ -1,11 +1,16 @@
 import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
 import AppSidebar from "@/components/dashboard/AppSidebar";
 import Header from "@/components/dashboard/Header";
 
+// НЕ редиректим здесь: layout не видит ?share=, а публичный отчёт по share-токену
+// должен открываться без логина. Гостю рендерим детей без хрома (чистый отчёт),
+// а сами страницы (список, новый отчёт) enforce-ят авторизацию у себя.
 export default async function ReportsLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  if (!session?.user) redirect("/login");
+
+  if (!session?.user) {
+    return <main className="min-h-screen">{children}</main>;
+  }
 
   return (
     <div className="flex min-h-screen bg-muted/30">

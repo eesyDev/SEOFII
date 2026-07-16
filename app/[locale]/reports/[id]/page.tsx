@@ -85,11 +85,14 @@ export default async function ReportPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ share?: string }>;
 }) {
-  const session = await auth();
   const { id } = await params;
   const { share } = await searchParams;
   const en = (await getLocale()) === "en";
 
+  // Гостевой режим по share-токену: НЕ вызываем auth() — иначе NextAuth
+  // уводит гостя на страницу входа (pages.signIn). Сессию читаем только
+  // когда share-токена нет.
+  const session = share ? null : await auth();
   const userId = session?.user?.id ?? null;
 
   const [report, user, monitoring] = await Promise.all([
