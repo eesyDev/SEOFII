@@ -250,6 +250,39 @@ export async function fetchHtmlViaDataForSEO(url: string): Promise<string | null
   }
 }
 
+// Третий уровень: ScrapingBee — резидентные прокси + реальный браузер + решатель
+// Cloudflare-challenge. Работает только если задан SCRAPINGBEE_API_KEY, иначе пропускается.
+export async function fetchHtmlViaScrapingBee(url: string): Promise<string | null> {
+  const key = process.env.SCRAPINGBEE_API_KEY;
+  if (!key) return null;
+
+  try {
+    const params = new URLSearchParams({
+      api_key: key,
+      url,
+      render_js: "true",
+      premium_proxy: "true", // резидентные прокси — нужны для обхода Cloudflare
+      block_resources: "true", // не грузим картинки/шрифты — быстрее и дешевле
+      country_code: "us",
+    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 45_000);
+    const res = await fetch(`https://app.scrapingbee.com/api/v1/?${params}`, {
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
+
+    if (!res.ok) {
+      console.warn(`[scraper] ScrapingBee failed for ${url}: HTTP ${res.status}`);
+      return null;
+    }
+    const html = await res.text();
+    return html.length > 500 ? html : null;
+  } catch (err) {
+    console.warn(`[scraper] ScrapingBee error for ${url}:`, err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 async function obtainHtml(url: string): Promise<{ html: string } | { fetchError: string }> {
   let directError: string;
   try {
@@ -264,8 +297,14 @@ async function obtainHtml(url: string): Promise<{ html: string } | { fetchError:
     directError = err instanceof Error ? err.message : "Неизвестная ошибка";
   }
 
+  // 2-й уровень: DataForSEO OnPage (берёт часть сайтов, что блокируют дата-центровые IP)
   const viaDfs = await fetchHtmlViaDataForSEO(url);
   if (viaDfs) return { html: viaDfs };
+
+  // 3-й уровень: ScrapingBee (обходит Cloudflare-challenge; только с ключом)
+  const viaBee = await fetchHtmlViaScrapingBee(url);
+  if (viaBee) return { html: viaBee };
+
   return { fetchError: directError };
 }
 
